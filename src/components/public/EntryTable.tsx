@@ -52,6 +52,12 @@ export default function EntryTable({ entries, now }: EntryTableProps) {
               >
                 <p className="text-xs font-medium text-slate-500">{entry.company.name}</p>
                 <p className="font-semibold text-slate-900">{entry.title}</p>
+                {entry.type === 'インターン' && (entry.eventSchedule || entry.eventPeriod) && (
+                  <p className="mt-0.5 text-xs font-medium text-brand-700">
+                    🗓 開催 {entry.eventSchedule}
+                    {entry.eventPeriod ? `（${entry.eventPeriod}）` : ''}
+                  </p>
+                )}
               </Link>
             </td>
             <td className="whitespace-nowrap px-3 py-3 align-top text-slate-600">{entry.type}</td>

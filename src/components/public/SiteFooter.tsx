@@ -3,6 +3,7 @@
 // =============================================================
 
 import Link from 'next/link';
+import PublicLogoutLink from './PublicLogoutLink';
 
 export default function SiteFooter() {
   return (
@@ -14,9 +15,12 @@ export default function SiteFooter() {
         </p>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p>© Abuild</p>
-          <Link href="/admin" className="text-slate-400 hover:text-slate-600 hover:underline">
-            社内管理
-          </Link>
+          <div className="flex items-center gap-3">
+            <PublicLogoutLink />
+            <Link href="/admin" className="text-slate-400 hover:text-slate-600 hover:underline">
+              社内管理
+            </Link>
+          </div>
         </div>
       </div>
     </footer>

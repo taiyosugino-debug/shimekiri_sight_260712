@@ -4,7 +4,7 @@
 // =============================================================
 
 import { Company, CompanyInput, Entry, EntryInput, Source } from './types';
-import { addDays, jstParts, toIsoJst } from './date';
+import { addDays, formatDateShort, jstParts, toIsoJst } from './date';
 
 /** now を基準に、指定日数後の JST 締切 ISO を作る（時刻は hh:mm） */
 function deadlineIn(now: Date, days: number, hh = 23, mm = 59): string {
@@ -83,36 +83,40 @@ interface EntryDraft {
   applySuffix?: string; // hpUrl に追記するパス
   selectionFlow?: string; // 選考の流れ
   webTest?: string; // 使うWebテストの種類
+  /** 開催開始（now からの相対日数）。インターン等の実施日程を動的生成するのに使う。 */
+  eventStartDays?: number;
+  /** 開催日数（1=1day）。eventStartDays と併せて開催日程・期間を組み立てる。 */
+  eventDays?: number;
 }
 
 // 約30件。pickup 5件・draft 2件・archived 1件・期限切れ published 1-2件を含む。
 const ENTRY_DRAFTS: EntryDraft[] = [
-  { companyKey: 'mitsui', title: 'サマーインターン（3days）', type: 'インターン', gradYear: 2028, days: 12, pickup: true, description: '総合商社のビジネスモデルを体感する3日間の実践型プログラムです。', selectionFlow: 'ES提出 → Webテスト → グループディスカッション → 面接（2回）', webTest: '玉手箱' },
-  { companyKey: 'mitsubishi-corp', title: 'サマーインターンシップ', type: 'インターン', gradYear: 2028, days: 9, pickup: true, description: '商社パーソンの仕事を疑似体験するグループワーク中心のプログラム。', selectionFlow: 'ES提出 → Webテスト → 面接（複数回）', webTest: 'SPI（テストセンター）' },
+  { companyKey: 'mitsui', title: 'サマーインターン（3days）', type: 'インターン', gradYear: 2028, days: 12, pickup: true, description: '総合商社のビジネスモデルを体感する3日間の実践型プログラムです。', selectionFlow: 'ES提出 → Webテスト → グループディスカッション → 面接（2回）', webTest: '玉手箱', eventStartDays: 34, eventDays: 3 },
+  { companyKey: 'mitsubishi-corp', title: 'サマーインターンシップ', type: 'インターン', gradYear: 2028, days: 9, pickup: true, description: '商社パーソンの仕事を疑似体験するグループワーク中心のプログラム。', selectionFlow: 'ES提出 → Webテスト → 面接（複数回）', webTest: 'SPI（テストセンター）', eventStartDays: 30, eventDays: 5 },
   { companyKey: 'itochu', title: '業界研究セミナー', type: '説明会・イベント', gradYear: 2028, days: 3, hh: 19, mm: 0, difficultyAdj: -2, description: 'オンライン開催の業界研究セミナーです。質疑応答の時間もあります。' },
   { companyKey: 'itochu', title: '秋冬インターン エントリー', type: 'インターン', gradYear: 2028, days: 40, description: '各事業本部の業務を深く知る秋冬インターンのエントリー受付です。' },
-  { companyKey: 'bcg', title: 'ケース面接対策インターン', type: 'インターン', gradYear: 2028, days: 6, pickup: true, description: 'ケース面接の考え方を学ぶ1dayワークショップ形式のインターンです。', selectionFlow: 'ES提出 → Webテスト → ケース面接（2回）', webTest: 'BCG独自のオンラインテスト' },
+  { companyKey: 'bcg', title: 'ケース面接対策インターン', type: 'インターン', gradYear: 2028, days: 6, pickup: true, description: 'ケース面接の考え方を学ぶ1dayワークショップ形式のインターンです。', selectionFlow: 'ES提出 → Webテスト → ケース面接（2回）', webTest: 'BCG独自のオンラインテスト', eventStartDays: 20, eventDays: 1 },
   { companyKey: 'mckinsey', title: 'サマープログラム', type: 'インターン', gradYear: 2028, days: 15, difficultyAdj: 1, description: '選考倍率が非常に高い難関プログラム。エントリーシートに加え適性検査があります。', selectionFlow: 'ES提出 → 適性検査 → ケース面接（複数回）', webTest: 'Solve（マッキンゼー独自）' },
   { companyKey: 'accenture', title: 'テクノロジーコンサルタント職 説明会', type: '説明会・イベント', gradYear: 2028, days: 5, hh: 18, mm: 30, difficultyAdj: -2, description: 'テクノロジー領域のコンサルティング職種紹介イベントです。' },
   { companyKey: 'accenture', title: '冬季インターン エントリー', type: 'インターン', gradYear: 2028, days: 55, description: '戦略・テクノロジー・オペレーションズの3コースから選択できる冬季インターン。' },
   { companyKey: 'pwc', title: '秋季インターンシップ', type: 'インターン', gradYear: 2028, days: 33, description: '監査・税務・コンサルティングの各部門を紹介するインターンです。' },
-  { companyKey: 'goldman', title: 'サマーアナリストプログラム', type: 'インターン', gradYear: 2028, days: 20, difficultyAdj: 1, pickup: true, description: '投資銀行部門の業務を体験する10週間のサマーアナリストプログラム。', selectionFlow: 'ES提出（英文レジュメ含む） → Webテスト → 面接（複数回）', webTest: 'SHL形式（玉手箱型）' },
+  { companyKey: 'goldman', title: 'サマーアナリストプログラム', type: 'インターン', gradYear: 2028, days: 20, difficultyAdj: 1, pickup: true, description: '投資銀行部門の業務を体験する10週間のサマーアナリストプログラム。', selectionFlow: 'ES提出（英文レジュメ含む） → Webテスト → 面接（複数回）', webTest: 'SHL形式（玉手箱型）', eventStartDays: 45, eventDays: 70 },
   { companyKey: 'nomura', title: 'サマーインターンシップ', type: 'インターン', gradYear: 2028, days: 11, description: '証券ビジネスの基礎を学ぶグループワーク中心のプログラムです。', selectionFlow: 'ES提出 → Webテスト → 面接（1回）', webTest: '玉手箱' },
   { companyKey: 'mufg', title: 'ウィンターインターンシップ', type: 'インターン', gradYear: 2028, days: 48, description: '銀行業務の全体像を学べる冬季インターンシップです。' },
   { companyKey: 'mufg', title: '本選考エントリー（第一クール）', type: '本選考', gradYear: 2027, days: 25, difficultyAdj: 0, description: '本選考第一クールのエントリーシート受付です。' },
   { companyKey: 'toyota', title: '技術系サマーインターン', type: 'インターン', gradYear: 2028, days: 18, description: 'モノづくりの現場を体感できる技術系学生向けインターンです。', selectionFlow: 'ES提出 → 適性検査 → 面接（1回）', webTest: 'SPI（WEBテスティング）' },
-  { companyKey: 'sony', title: 'クリエイティブ職インターン', type: 'インターン', gradYear: 2028, days: 22, pickup: true, description: 'エンタテインメント事業のクリエイティブ職を体験できるプログラム。' },
+  { companyKey: 'sony', title: 'クリエイティブ職インターン', type: 'インターン', gradYear: 2028, days: 22, pickup: true, description: 'エンタテインメント事業のクリエイティブ職を体験できるプログラム。', eventStartDays: 40, eventDays: 2 },
   { companyKey: 'panasonic', title: '技術系インターンシップ', type: 'インターン', gradYear: 2028, days: 27, description: 'くらしに関わる技術開発の現場を知るインターンシップです。' },
   { companyKey: 'keyence', title: '会社説明会', type: '説明会・イベント', gradYear: 2028, days: 2, hh: 14, mm: 0, difficultyAdj: -2, description: '高収益経営の秘密に迫るオンライン会社説明会です。' },
   { companyKey: 'nintendo', title: 'サマーインターンシップ', type: 'インターン', gradYear: 2028, days: 30, difficultyAdj: 1, description: 'ゲーム開発の企画・プログラム・デザイン各コースのインターンです。' },
   { companyKey: 'dentsu', title: 'クリエイティブ職インターン', type: 'インターン', gradYear: 2028, days: 14, description: '広告クリエイティブの企画立案を体験するプログラムです。' },
   { companyKey: 'hakuhodo', title: 'マーケティング職インターン', type: 'インターン', gradYear: 2028, days: 16, description: '生活者発想を学ぶマーケティング職向けインターンシップ。' },
-  { companyKey: 'nttdata', title: 'エンジニア職インターン', type: 'インターン', gradYear: 2028, days: 8, description: 'システム開発の上流工程を体験できるエンジニア職向けインターンです。', selectionFlow: 'ES提出 → Webテスト → グループディスカッション → 面接', webTest: '玉手箱' },
+  { companyKey: 'nttdata', title: 'エンジニア職インターン', type: 'インターン', gradYear: 2028, days: 8, description: 'システム開発の上流工程を体験できるエンジニア職向けインターンです。', selectionFlow: 'ES提出 → Webテスト → グループディスカッション → 面接', webTest: '玉手箱', eventStartDays: 28, eventDays: 3 },
   { companyKey: 'recruit', title: 'ビジネスコースインターン', type: 'インターン', gradYear: 2028, days: 4, difficultyAdj: -1, description: '新規事業提案にチャレンジするビジネスコースのインターンです。', selectionFlow: 'ES提出 → Webテスト → 面接（2回）', webTest: 'SPI' },
-  { companyKey: 'rakuten', title: 'エンジニア職サマーインターン', type: 'インターン', gradYear: 2028, days: 24, pickup: true, description: 'グローバルなEC・フィンテック事業を支える技術を学ぶインターン。' },
+  { companyKey: 'rakuten', title: 'エンジニア職サマーインターン', type: 'インターン', gradYear: 2028, days: 24, pickup: true, description: 'グローバルなEC・フィンテック事業を支える技術を学ぶインターン。', eventStartDays: 42, eventDays: 5 },
   { companyKey: 'cyberagent', title: 'サマーインターンシップ', type: 'インターン', gradYear: 2028, days: 7, description: '広告・ゲーム・メディア事業から選べる複数コース制インターンです。', selectionFlow: 'ES提出 → 面接（2回）', webTest: 'なし（面接のみ）' },
   { companyKey: 'lineyahoo', title: 'プロダクト開発インターン', type: 'インターン', gradYear: 2028, days: 35, description: '生活インフラを支えるプロダクト開発を体験するインターンです。' },
-  { companyKey: 'cybozu', title: '開発職1dayインターン', type: 'インターン', gradYear: 2028, days: 1, difficultyAdj: -1, description: 'チームワークあふれる会社を作るための開発現場を知る1dayインターン。' },
+  { companyKey: 'cybozu', title: '開発職1dayインターン', type: 'インターン', gradYear: 2028, days: 1, difficultyAdj: -1, description: 'チームワークあふれる会社を作るための開発現場を知る1dayインターン。', eventStartDays: 10, eventDays: 1 },
   { companyKey: 'smarthr', title: 'プロダクト職説明会', type: '説明会・イベント', gradYear: 2028, days: 0, hh: 20, mm: 0, difficultyAdj: -1, description: '急成長スタートアップのプロダクト組織を紹介するオンライン説明会。' },
   { companyKey: 'smarthr', title: 'エンジニア職インターン', type: 'インターン', gradYear: 2028, days: 45, description: 'SaaSプロダクト開発の現場に入り込むエンジニア向けインターン。' },
   // draft（承認待ちフローのデモ用）
@@ -128,6 +132,20 @@ const ENTRY_DRAFTS: EntryDraft[] = [
 function toEntryInput(now: Date, def: EntryDraft, companyId: string): EntryInput & { id?: string } {
   const company = COMPANY_DEFS.find((c) => c.key === def.companyKey)!;
   const diff = clampDifficulty(baseDifficulty(company.size) + (def.difficultyAdj ?? 0));
+  let eventSchedule: string | undefined;
+  let eventPeriod: string | undefined;
+  if (def.eventStartDays !== undefined) {
+    const dur = def.eventDays ?? 1;
+    const start = addDays(now, def.eventStartDays);
+    if (dur <= 1) {
+      eventSchedule = formatDateShort(start.toISOString());
+      eventPeriod = '1day';
+    } else {
+      const end = addDays(now, def.eventStartDays + dur - 1);
+      eventSchedule = `${formatDateShort(start.toISOString())}〜${formatDateShort(end.toISOString())}`;
+      eventPeriod = `${dur}日間`;
+    }
+  }
   return {
     companyId,
     title: def.title,
@@ -141,6 +159,8 @@ function toEntryInput(now: Date, def: EntryDraft, companyId: string): EntryInput
     sourceUrl: company.hpUrl,
     selectionFlow: def.selectionFlow,
     webTest: def.webTest,
+    eventSchedule,
+    eventPeriod,
     status: def.status ?? 'published',
     pickup: def.pickup ?? false,
     source: 'manual',
@@ -185,6 +205,8 @@ export function buildSeedData(now: Date): { companies: Company[]; entries: Entry
       sourceUrl: input.sourceUrl,
       selectionFlow: input.selectionFlow,
       webTest: input.webTest,
+      eventSchedule: input.eventSchedule,
+      eventPeriod: input.eventPeriod,
       status: input.status ?? 'published',
       pickup: input.pickup ?? false,
       source: input.source ?? 'manual',

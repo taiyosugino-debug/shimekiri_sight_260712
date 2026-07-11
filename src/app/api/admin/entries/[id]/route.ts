@@ -144,6 +144,22 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     patch.webTest = typeof webTest === 'string' && webTest.trim() ? webTest.trim() : undefined;
   }
 
+  if ('eventSchedule' in b) {
+    const eventSchedule = b.eventSchedule;
+    if (eventSchedule !== undefined && eventSchedule !== null && typeof eventSchedule !== 'string') {
+      return NextResponse.json({ error: '開催日程が不正です' }, { status: 400 });
+    }
+    patch.eventSchedule = typeof eventSchedule === 'string' && eventSchedule.trim() ? eventSchedule.trim() : undefined;
+  }
+
+  if ('eventPeriod' in b) {
+    const eventPeriod = b.eventPeriod;
+    if (eventPeriod !== undefined && eventPeriod !== null && typeof eventPeriod !== 'string') {
+      return NextResponse.json({ error: '開催期間が不正です' }, { status: 400 });
+    }
+    patch.eventPeriod = typeof eventPeriod === 'string' && eventPeriod.trim() ? eventPeriod.trim() : undefined;
+  }
+
   if ('status' in b) {
     const status = b.status;
     if (!isEntryStatus(status)) {

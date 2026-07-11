@@ -7,8 +7,9 @@ import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { getStore } from '@/lib/store';
 import { difficultyStars, EntryWithCompany } from '@/lib/types';
-import { formatDeadlineFull, jstYmdCompact, remainLabel } from '@/lib/date';
+import { formatDeadline, formatDeadlineFull, jstYmdCompact, remainLabel } from '@/lib/date';
 import DaysBadge from '@/components/public/DaysBadge';
+import { recommendEntries } from '@/lib/recommend';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,6 +41,12 @@ export default async function EntryDetailPage({ params }: EntryDetailPageProps) 
   }
 
   const entryWithCompany: EntryWithCompany = { ...entry, company };
+
+  const [allEntries, allCompanies] = await Promise.all([
+    store.listEntries(),
+    store.listCompanies(),
+  ]);
+  const recommendations = recommendEntries(entryWithCompany, allEntries, allCompanies);
 
   const googleCalendarUrl = buildGoogleCalendarUrl(
     entryWithCompany.company.name,
@@ -81,6 +88,17 @@ export default async function EntryDetailPage({ params }: EntryDetailPageProps) 
             {difficultyStars(entryWithCompany.difficulty)}
           </p>
         </div>
+
+        {entryWithCompany.type === 'インターン' &&
+          (entryWithCompany.eventSchedule || entryWithCompany.eventPeriod) && (
+            <div className="mt-4 rounded-lg bg-brand-50 p-3">
+              <p className="label">開催日程・期間</p>
+              <p className="text-sm font-semibold text-slate-800">
+                {entryWithCompany.eventSchedule}
+                {entryWithCompany.eventPeriod ? `（${entryWithCompany.eventPeriod}）` : ''}
+              </p>
+            </div>
+          )}
 
         {(entryWithCompany.selectionFlow || entryWithCompany.webTest) && (
           <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -168,7 +186,40 @@ export default async function EntryDetailPage({ params }: EntryDetailPageProps) 
         </p>
       </div>
 
-      <div className="mt-4">
+      {recommendations.length > 0 && (
+        <section className="mt-6">
+          <h2 className="mb-1 text-sm font-bold text-slate-900">
+            この企業を見ているなら、こちらもおすすめ
+          </h2>
+          <p className="mb-3 text-xs text-slate-500">
+            「{entryWithCompany.company.industry}／{entryWithCompany.company.size}」が近い企業をピックアップしました。
+          </p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {recommendations.map((rec) => (
+              <Link
+                key={rec.id}
+                href={`/entries/${rec.id}`}
+                className="card flex flex-col gap-2 p-4 transition-shadow hover:shadow-md"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <p className="min-w-0 truncate text-sm font-bold text-slate-900">
+                    {rec.company.name}
+                  </p>
+                  <DaysBadge deadlineAt={rec.deadlineAt} className="shrink-0" />
+                </div>
+                <p className="line-clamp-2 text-xs font-medium text-slate-600">{rec.title}</p>
+                <div className="mt-auto flex flex-wrap items-center gap-1">
+                  <span className="badge bg-slate-100 text-slate-600">{rec.company.industry}</span>
+                  <span className="badge bg-slate-100 text-slate-600">{rec.company.size}</span>
+                </div>
+                <p className="text-xs text-slate-500">締切 {formatDeadline(rec.deadlineAt)}</p>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <div className="mt-6">
         <Link href="/" className="text-sm text-slate-500 hover:text-slate-700">
           ← 一覧へ戻る
         </Link>

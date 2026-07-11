@@ -36,6 +36,16 @@ export default function EntryCard({ entry, now }: EntryCardProps) {
         <span>{entry.gradYear}卒</span>
       </div>
 
+      {entry.type === 'インターン' && (entry.eventSchedule || entry.eventPeriod) && (
+        <div className="flex flex-wrap items-center gap-x-1.5 text-xs font-medium text-brand-700">
+          <span aria-hidden="true">🗓</span>
+          <span>
+            開催 {entry.eventSchedule}
+            {entry.eventPeriod ? `（${entry.eventPeriod}）` : ''}
+          </span>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
         <span>{entry.company.size}</span>
         <span aria-hidden="true">・</span>

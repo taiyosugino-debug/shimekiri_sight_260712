@@ -47,6 +47,8 @@ interface FormState {
   sourceUrl: string;
   selectionFlow: string;
   webTest: string;
+  eventSchedule: string;
+  eventPeriod: string;
   description: string;
   status: EntryStatus;
   pickup: boolean;
@@ -70,6 +72,8 @@ function initialFormState(): FormState {
     sourceUrl: '',
     selectionFlow: '',
     webTest: '',
+    eventSchedule: '',
+    eventPeriod: '',
     description: '',
     status: 'draft',
     pickup: false,
@@ -127,6 +131,8 @@ export default function EntryForm({ entryId }: Props) {
             sourceUrl: e.sourceUrl ?? '',
             selectionFlow: e.selectionFlow ?? '',
             webTest: e.webTest ?? '',
+            eventSchedule: e.eventSchedule ?? '',
+            eventPeriod: e.eventPeriod ?? '',
             description: e.description ?? '',
             status: e.status,
             pickup: e.pickup,
@@ -208,6 +214,8 @@ export default function EntryForm({ entryId }: Props) {
         sourceUrl: form.sourceUrl.trim() || undefined,
         selectionFlow: form.selectionFlow.trim() || undefined,
         webTest: form.webTest.trim() || undefined,
+        eventSchedule: form.eventSchedule.trim() || undefined,
+        eventPeriod: form.eventPeriod.trim() || undefined,
         description: form.description.trim() || undefined,
         status: form.status,
         pickup: form.pickup,
@@ -476,6 +484,35 @@ export default function EntryForm({ entryId }: Props) {
             value={form.webTest}
             onChange={(e) => updateField('webTest', e.target.value)}
             placeholder="例：SPI / 玉手箱 / TG-WEB / GAB / 独自"
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div>
+          <label htmlFor="eventSchedule" className="label">
+            開催日程（インターン等）
+          </label>
+          <input
+            id="eventSchedule"
+            type="text"
+            className="input"
+            value={form.eventSchedule}
+            onChange={(e) => updateField('eventSchedule', e.target.value)}
+            placeholder="例：8/20(火)〜8/22(木)"
+          />
+        </div>
+        <div>
+          <label htmlFor="eventPeriod" className="label">
+            開催期間
+          </label>
+          <input
+            id="eventPeriod"
+            type="text"
+            className="input"
+            value={form.eventPeriod}
+            onChange={(e) => updateField('eventPeriod', e.target.value)}
+            placeholder="例：3日間 / 1day / 2週間"
           />
         </div>
       </div>

@@ -100,6 +100,8 @@ export class MemoryStore implements Store {
       sourceUrl: input.sourceUrl,
       selectionFlow: input.selectionFlow,
       webTest: input.webTest,
+      eventSchedule: input.eventSchedule,
+      eventPeriod: input.eventPeriod,
       status: input.status ?? 'draft',
       pickup: input.pickup ?? false,
       source: input.source ?? 'manual',

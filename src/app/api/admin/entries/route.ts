@@ -98,6 +98,8 @@ export async function POST(request: Request) {
     sourceUrl: typeof b.sourceUrl === 'string' && b.sourceUrl.trim() ? b.sourceUrl.trim() : undefined,
     selectionFlow: typeof b.selectionFlow === 'string' && b.selectionFlow.trim() ? b.selectionFlow.trim() : undefined,
     webTest: typeof b.webTest === 'string' && b.webTest.trim() ? b.webTest.trim() : undefined,
+    eventSchedule: typeof b.eventSchedule === 'string' && b.eventSchedule.trim() ? b.eventSchedule.trim() : undefined,
+    eventPeriod: typeof b.eventPeriod === 'string' && b.eventPeriod.trim() ? b.eventPeriod.trim() : undefined,
     status: status ?? 'draft',
     pickup: typeof b.pickup === 'boolean' ? b.pickup : false,
     source: 'manual',

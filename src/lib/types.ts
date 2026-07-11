@@ -60,6 +60,10 @@ export interface Entry {
   selectionFlow?: string;
   /** 使うWebテストの種類（例: SPI / 玉手箱 / TG-WEB / GAB / 独自） */
   webTest?: string;
+  /** 開催日程（インターン等の実施日。自由記述。例: 8/20(火)〜8/22(木)） */
+  eventSchedule?: string;
+  /** 開催期間（例: 3日間 / 1day / 2週間） */
+  eventPeriod?: string;
   status: EntryStatus;
   /** 注目（ピックアップ）フラグ */
   pickup: boolean;
@@ -110,6 +114,8 @@ export interface EntryInput {
   sourceUrl?: string;
   selectionFlow?: string;
   webTest?: string;
+  eventSchedule?: string;
+  eventPeriod?: string;
   status?: EntryStatus;
   pickup?: boolean;
   source?: string;

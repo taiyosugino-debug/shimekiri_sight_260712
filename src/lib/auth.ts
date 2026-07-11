@@ -5,6 +5,7 @@
 // =============================================================
 
 export const ADMIN_COOKIE_NAME = 'shimekiri_admin';
+export const PUBLIC_COOKIE_NAME = 'shimekiri_public';
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -67,6 +68,35 @@ export async function verifyAdminCookieValue(value: string | undefined | null): 
   const expMs = Number(expMsStr);
   if (!Number.isFinite(expMs) || expMs < Date.now()) return false;
   const expected = await hmacSha256Hex(getAuthSecret(), expMsStr);
+  return timingSafeEqual(expected, sig);
+}
+
+/** 公開サイト用パスワード（未設定時は既定値。本番では PUBLIC_PASSWORD の設定を推奨） */
+export function getPublicPassword(): string {
+  return process.env.PUBLIC_PASSWORD || 'Abuild0808';
+}
+
+/** 公開サイト用 Cookie 署名鍵（未設定時は PUBLIC_PASSWORD を流用） */
+function getPublicAuthSecret(): string {
+  return process.env.AUTH_SECRET || getPublicPassword();
+}
+
+/** 公開サイト用 Cookie の値を発行する（`${expMs}.${hex(HMAC('pub.'+expMs))}`）。管理用と署名が混ざらないよう名前空間 'pub.' を付ける。 */
+export async function createPublicCookieValue(expiresAt: number = Date.now() + SEVEN_DAYS_MS): Promise<string> {
+  const expMs = String(expiresAt);
+  const sig = await hmacSha256Hex(getPublicAuthSecret(), `pub.${expMs}`);
+  return `${expMs}.${sig}`;
+}
+
+/** 公開サイト用 Cookie の値が有効な署名かつ未失効かを検証する */
+export async function verifyPublicCookieValue(value: string | undefined | null): Promise<boolean> {
+  if (!value) return false;
+  const parts = value.split('.');
+  if (parts.length !== 2) return false;
+  const [expMsStr, sig] = parts;
+  const expMs = Number(expMsStr);
+  if (!Number.isFinite(expMs) || expMs < Date.now()) return false;
+  const expected = await hmacSha256Hex(getPublicAuthSecret(), `pub.${expMsStr}`);
   return timingSafeEqual(expected, sig);
 }
 
