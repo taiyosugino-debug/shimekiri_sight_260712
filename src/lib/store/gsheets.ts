@@ -45,6 +45,9 @@ const ENTRIES_HEADER = [
   'source_url',
   'selection_flow',
   'web_test',
+  // 追加分（開催日程・期間。既存シート互換のため末尾に追加）
+  'event_schedule',
+  'event_period',
 ];
 const SOURCES_HEADER = [
   'id',
@@ -316,6 +319,8 @@ function rowToEntry(cells: string[]): Entry | null {
     sourceUrl,
     selectionFlow,
     webTest,
+    eventSchedule,
+    eventPeriod,
   ] = cells;
   if (cellToBool(deleted)) return null;
   if (!id) return null;
@@ -332,6 +337,8 @@ function rowToEntry(cells: string[]): Entry | null {
     sourceUrl: emptyToUndefined(sourceUrl),
     selectionFlow: emptyToUndefined(selectionFlow),
     webTest: emptyToUndefined(webTest),
+    eventSchedule: emptyToUndefined(eventSchedule),
+    eventPeriod: emptyToUndefined(eventPeriod),
     status: (cellOrEmpty(status) || 'draft') as Entry['status'],
     pickup: cellToBool(pickup),
     source: cellOrEmpty(source) || 'manual',
@@ -360,6 +367,8 @@ function entryToRow(e: Entry, deleted = false): string[] {
     cellOrEmpty(e.sourceUrl),
     cellOrEmpty(e.selectionFlow),
     cellOrEmpty(e.webTest),
+    cellOrEmpty(e.eventSchedule),
+    cellOrEmpty(e.eventPeriod),
   ];
 }
 

@@ -33,7 +33,7 @@ function LoginForm() {
         return;
       }
       const next = searchParams.get('next');
-      window.location.href = next && next.startsWith('/') ? next : '/';
+      window.location.href = next && next.startsWith('/') && !next.startsWith('//') ? next : '/';
     } catch {
       setError('サーバーに接続できませんでした。ネットワーク状況をご確認ください。');
       setSubmitting(false);
