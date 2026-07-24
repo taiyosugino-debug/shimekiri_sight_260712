@@ -238,7 +238,8 @@ export async function runSource(source: Source, store: Store): Promise<SyncResul
         applyUrl: item.url,
         // 情報源URLとして取込元（フィード/ページ）のURLを記録する
         sourceUrl: source.url,
-        status: 'draft',
+        // autoPublish が有効な取込元は即公開、それ以外は従来どおり承認待ち(draft)
+        status: source.autoPublish ? 'published' : 'draft',
         pickup: false,
         source: sourceKey,
       });

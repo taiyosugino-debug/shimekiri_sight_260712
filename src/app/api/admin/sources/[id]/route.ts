@@ -76,6 +76,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     patch.enabled = enabled;
   }
 
+  if ('autoPublish' in b) {
+    const autoPublish = b.autoPublish;
+    if (typeof autoPublish !== 'boolean') {
+      return NextResponse.json({ error: 'autoPublish は真偽値で指定してください' }, { status: 400 });
+    }
+    patch.autoPublish = autoPublish;
+  }
+
   const updated = await store.updateSource(id, patch);
   if (!updated) {
     return NextResponse.json({ error: '指定された取込元が見つかりません' }, { status: 404 });

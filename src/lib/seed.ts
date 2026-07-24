@@ -238,6 +238,7 @@ export function buildSeedData(now: Date): { companies: Company[]; entries: Entry
         2,
       ),
       enabled: false,
+      autoPublish: false,
       lastRunAt: undefined,
       lastStatus: undefined,
       lastMessage: '未実行（サンプル設定のため無効化されています。実際のURLに差し替えてから有効化してください）',

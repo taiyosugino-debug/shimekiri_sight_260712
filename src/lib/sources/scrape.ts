@@ -57,6 +57,76 @@ function toNumberOrUndefined(v: string | undefined): number | undefined {
 }
 
 /** HTML を取得し cheerio で itemSelector/fields に従って RawItem[] へ変換する */
+
+// ---------------- robots.txt 遵守 ----------------
+// 取得前に対象オリジンの robots.txt を確認し、当 UA でクロール禁止のパスなら中止する。
+// robots.txt が無い/取得不可の場合は慣行に従い「許可」とみなす。
+
+const ROBOTS_UA_TOKEN = 'abuildshimekirinavi';
+
+interface RobotsRule { allow: boolean; path: string; }
+
+export function parseRobots(text: string): RobotsRule[] {
+  // 当 UA 指定グループがあればそれを、無ければ '*' グループの規則を採用する
+  const lines = text.split(/\r?\n/);
+  const starRules: RobotsRule[] = [];
+  const uaRules: RobotsRule[] = [];
+  let currentAgents: string[] = [];
+  let sawDirectiveSinceAgent = false;
+  for (const raw of lines) {
+    const line = raw.replace(/#.*$/, '').trim();
+    if (!line) continue;
+    const idx = line.indexOf(':');
+    if (idx === -1) continue;
+    const field = line.slice(0, idx).trim().toLowerCase();
+    const value = line.slice(idx + 1).trim();
+    if (field === 'user-agent') {
+      if (sawDirectiveSinceAgent) { currentAgents = []; sawDirectiveSinceAgent = false; }
+      currentAgents.push(value.toLowerCase());
+      continue;
+    }
+    if (field === 'disallow' || field === 'allow') {
+      sawDirectiveSinceAgent = true;
+      const rule: RobotsRule = { allow: field === 'allow', path: value };
+      for (const a of currentAgents) {
+        if (a === '*') starRules.push(rule);
+        else if (ROBOTS_UA_TOKEN.includes(a) || a.includes(ROBOTS_UA_TOKEN)) uaRules.push(rule);
+      }
+    }
+  }
+  return uaRules.length > 0 ? uaRules : starRules;
+}
+
+/** Google 準拠の最長一致（同長は allow 優先）で path が許可されるか判定する */
+export function isPathAllowed(rules: RobotsRule[], path: string): boolean {
+  let best: RobotsRule | null = null;
+  for (const r of rules) {
+    if (r.path === '') continue; // 空の Disallow は「全許可」を意味するため無視
+    if (path.startsWith(r.path)) {
+      if (!best || r.path.length > best.path.length || (r.path.length === best.path.length && r.allow)) {
+        best = r;
+      }
+    }
+  }
+  return best ? best.allow : true;
+}
+
+/** 対象URLが robots.txt 上クロール許可されているか。取得不可時は許可扱い。 */
+async function isAllowedByRobots(targetUrl: string): Promise<boolean> {
+  let origin: string; let path: string;
+  try { const u = new URL(targetUrl); origin = u.origin; path = u.pathname + (u.search || ''); }
+  catch { return true; }
+  try {
+    const res = await fetchWithTimeout(`${origin}/robots.txt`);
+    if (!res.ok) return true; // 404 等は「robots 無し＝全許可」
+    const body = await readTextWithLimit(res, 512 * 1024);
+    const rules = parseRobots(body);
+    return isPathAllowed(rules, path);
+  } catch {
+    return true; // 取得失敗時はブロックしない（慣行）
+  }
+}
+
 export async function fetchScrapeItems(source: Source): Promise<RawItem[]> {
   const config: ScrapeConfig = source.configJson
     ? JSON.parse(source.configJson)
@@ -64,6 +134,12 @@ export async function fetchScrapeItems(source: Source): Promise<RawItem[]> {
 
   if (!config.itemSelector) {
     throw new Error('configJson.itemSelector が設定されていません');
+  }
+
+  // robots.txt を尊重し、許可されていないパスの取得は行わない
+  const allowed = await isAllowedByRobots(source.url);
+  if (!allowed) {
+    throw new Error(`robots.txt によりクロールが許可されていません（${source.url}）。取込元の対象URL・パスをご確認ください。`);
   }
 
   const res = await fetchWithTimeout(source.url);

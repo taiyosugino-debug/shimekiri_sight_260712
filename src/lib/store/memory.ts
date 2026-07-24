@@ -149,6 +149,7 @@ export class MemoryStore implements Store {
       url: input.url,
       configJson: input.configJson,
       enabled: input.enabled,
+      autoPublish: input.autoPublish ?? false,
       lastRunAt: undefined,
       lastStatus: undefined,
       lastMessage: undefined,

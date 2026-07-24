@@ -60,6 +60,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'enabled は真偽値で指定してください' }, { status: 400 });
   }
 
+  const autoPublish = typeof b.autoPublish === 'boolean' ? b.autoPublish : false;
+
   const store = getStore();
   const source = await store.createSource({
     name: name.trim(),
@@ -67,6 +69,7 @@ export async function POST(request: Request) {
     url: url.trim(),
     configJson,
     enabled,
+    autoPublish,
   });
 
   return NextResponse.json({ source });

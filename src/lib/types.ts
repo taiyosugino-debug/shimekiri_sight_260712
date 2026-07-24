@@ -85,6 +85,8 @@ export interface Source {
   /** アダプタ設定（JSON 文字列）。スキーマは PROJECT_SPEC.md §8 */
   configJson: string;
   enabled: boolean;
+  /** 取込項目を承認待ち(draft)ではなく即公開(published)にするか。既定 false（＝承認制） */
+  autoPublish: boolean;
   lastRunAt?: string;
   lastStatus?: 'ok' | 'error';
   lastMessage?: string;
@@ -127,6 +129,7 @@ export interface SourceInput {
   url: string;
   configJson: string;
   enabled: boolean;
+  autoPublish?: boolean;
 }
 
 export interface SourceRuntimePatch {

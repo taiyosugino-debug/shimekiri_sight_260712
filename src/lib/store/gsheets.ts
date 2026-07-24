@@ -62,6 +62,8 @@ const SOURCES_HEADER = [
   'created_at',
   'updated_at',
   'deleted',
+  // 追加分（自動公開フラグ。既存シート互換のため末尾に追加）
+  'auto_publish',
 ];
 
 function genId(prefix: string): string {
@@ -373,7 +375,7 @@ function entryToRow(e: Entry, deleted = false): string[] {
 }
 
 function rowToSource(cells: string[]): Source | null {
-  const [id, name, type, url, configJson, enabled, lastRunAt, lastStatus, lastMessage, createdAt, updatedAt, deleted] =
+  const [id, name, type, url, configJson, enabled, lastRunAt, lastStatus, lastMessage, createdAt, updatedAt, deleted, autoPublish] =
     cells;
   if (cellToBool(deleted)) return null;
   if (!id) return null;
@@ -384,6 +386,7 @@ function rowToSource(cells: string[]): Source | null {
     url: cellOrEmpty(url),
     configJson: cellOrEmpty(configJson) || '{}',
     enabled: cellToBool(enabled),
+    autoPublish: cellToBool(autoPublish),
     lastRunAt: emptyToUndefined(lastRunAt),
     lastStatus: emptyToUndefined(lastStatus) as Source['lastStatus'],
     lastMessage: emptyToUndefined(lastMessage),
@@ -406,6 +409,7 @@ function sourceToRow(s: Source, deleted = false): string[] {
     s.createdAt,
     s.updatedAt,
     boolToCell(deleted),
+    boolToCell(s.autoPublish),
   ];
 }
 
@@ -592,6 +596,7 @@ export class GSheetsStore implements Store {
       url: input.url,
       configJson: input.configJson,
       enabled: input.enabled,
+      autoPublish: input.autoPublish ?? false,
       lastRunAt: undefined,
       lastStatus: undefined,
       lastMessage: undefined,

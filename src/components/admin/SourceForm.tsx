@@ -23,6 +23,7 @@ export default function SourceForm({ onCreated }: Props) {
   const [url, setUrl] = useState('');
   const [configJson, setConfigJson] = useState('');
   const [enabled, setEnabled] = useState(false);
+  const [autoPublish, setAutoPublish] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,12 +50,13 @@ export default function SourceForm({ onCreated }: Props) {
     try {
       await adminFetch('/api/admin/sources', {
         method: 'POST',
-        body: { name: name.trim(), type, url: url.trim(), configJson: configToUse, enabled },
+        body: { name: name.trim(), type, url: url.trim(), configJson: configToUse, enabled, autoPublish },
       });
       setName('');
       setUrl('');
       setConfigJson('');
       setEnabled(false);
+      setAutoPublish(true);
       onCreated();
     } catch (e) {
       setError(errorMessage(e));
@@ -137,6 +139,19 @@ export default function SourceForm({ onCreated }: Props) {
         />
         <label htmlFor="sourceEnabled" className="text-sm text-slate-700">
           有効にする
+        </label>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <input
+          id="sourceAutoPublish"
+          type="checkbox"
+          checked={autoPublish}
+          onChange={(e) => setAutoPublish(e.target.checked)}
+          className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-600"
+        />
+        <label htmlFor="sourceAutoPublish" className="text-sm text-slate-700">
+          取込項目を自動公開する（オフ＝承認待ちに入れる）
         </label>
       </div>
 
