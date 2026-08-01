@@ -34,6 +34,7 @@ export default function ReviewPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
+  const [crawling, setCrawling] = useState(false);
   const [onlyPending, setOnlyPending] = useState(true);
 
   const load = useCallback(async () => {
@@ -83,6 +84,36 @@ export default function ReviewPage() {
     }
   }
 
+  async function runCrawl() {
+    setCrawling(true);
+    setNotice(null);
+    setError(null);
+    try {
+      const data = await adminFetch<{
+        processed: number;
+        done: boolean;
+        created: number;
+        updated: number;
+        failed: number;
+        results: { companyName: string; error?: string }[];
+      }>('/api/admin/crawl', { method: 'POST', body: { restart: true } });
+      const failedNames = data.results
+        .filter((r) => r.error)
+        .map((r) => r.companyName)
+        .join('、');
+      setNotice(
+        `巡回しました：${data.processed}社を処理（新規 ${data.created} / 更新 ${data.updated}）` +
+          (data.failed > 0 ? `／取得できなかった企業 ${data.failed}社（${failedNames}）` : '') +
+          (data.done ? '' : '／時間切れのため途中まで。もう一度押すと続きから処理します'),
+      );
+      await load();
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setCrawling(false);
+    }
+  }
+
   const visible = (items ?? []).filter((i) => (onlyPending ? i.decision === '未確認' : true));
   const lowCount = (items ?? []).filter((i) => i.confidence === '低' && i.decision === '未確認').length;
 
@@ -96,9 +127,14 @@ export default function ReviewPage() {
             {lowCount > 0 && <span className="ml-1 font-medium text-rose-600">未確認の「低」が {lowCount} 件</span>}
           </p>
         </div>
-        <button type="button" className="btn-primary text-sm" disabled={importing} onClick={importApproved}>
-          {importing ? '取り込み中…' : '承認済みを取り込む'}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className="btn-ghost text-sm" disabled={crawling} onClick={runCrawl}>
+            {crawling ? '巡回中…（最大1分）' : '今すぐ巡回する'}
+          </button>
+          <button type="button" className="btn-primary text-sm" disabled={importing} onClick={importApproved}>
+            {importing ? '取り込み中…' : '承認済みを取り込む'}
+          </button>
+        </div>
       </div>
 
       <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
