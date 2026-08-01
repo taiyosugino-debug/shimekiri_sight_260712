@@ -11,6 +11,8 @@ import {
   CompanyInput,
   Entry,
   EntryInput,
+  ReviewItem,
+  ReviewItemInput,
   Source,
   SourceInput,
   SourceRuntimePatch,
@@ -27,6 +29,8 @@ const seed = buildSeedData(new Date());
 let companies: Company[] = [...seed.companies];
 let entries: Entry[] = [...seed.entries];
 let sources: Source[] = [...seed.sources];
+let reviewItems: ReviewItem[] = [];
+const meta = new Map<string, string>();
 
 export class MemoryStore implements Store {
   backendName: 'memory' = 'memory';
@@ -49,6 +53,7 @@ export class MemoryStore implements Store {
       industry: input.industry,
       size: input.size,
       hpUrl: input.hpUrl,
+      recruitUrl: input.recruitUrl,
       note: input.note,
       createdAt: now,
       updatedAt: now,
@@ -128,6 +133,66 @@ export class MemoryStore implements Store {
     const before = entries.length;
     entries = entries.filter((e) => e.id !== id);
     return entries.length < before;
+  }
+
+  // ---------------- review（要確認リスト） ----------------
+
+  async listReviewItems(): Promise<ReviewItem[]> {
+    return [...reviewItems];
+  }
+
+  async getReviewItem(id: string): Promise<ReviewItem | null> {
+    return reviewItems.find((r) => r.id === id) ?? null;
+  }
+
+  async createReviewItem(input: ReviewItemInput & { id?: string }): Promise<ReviewItem> {
+    const now = nowIso();
+    const item: ReviewItem = {
+      id: input.id || genId('rv'),
+      companyId: input.companyId,
+      companyName: input.companyName,
+      pageUrl: input.pageUrl,
+      title: input.title,
+      deadlineText: input.deadlineText,
+      deadlineAt: input.deadlineAt,
+      type: input.type,
+      confidence: input.confidence,
+      reasons: input.reasons,
+      decision: input.decision ?? '未確認',
+      entryId: input.entryId,
+      previousDeadlineAt: input.previousDeadlineAt,
+      contentHash: input.contentHash,
+      firstSeenAt: input.firstSeenAt ?? now,
+      lastSeenAt: input.lastSeenAt ?? now,
+      createdAt: now,
+      updatedAt: now,
+    };
+    reviewItems.push(item);
+    return item;
+  }
+
+  async updateReviewItem(id: string, patch: Partial<ReviewItemInput>): Promise<ReviewItem | null> {
+    const idx = reviewItems.findIndex((r) => r.id === id);
+    if (idx === -1) return null;
+    const updated: ReviewItem = { ...reviewItems[idx], ...patch, updatedAt: nowIso() };
+    reviewItems[idx] = updated;
+    return updated;
+  }
+
+  async deleteReviewItem(id: string): Promise<boolean> {
+    const before = reviewItems.length;
+    reviewItems = reviewItems.filter((r) => r.id !== id);
+    return reviewItems.length < before;
+  }
+
+  // ---------------- meta（巡回カーソル等） ----------------
+
+  async getMeta(key: string): Promise<string | null> {
+    return meta.get(key) ?? null;
+  }
+
+  async setMeta(key: string, value: string): Promise<void> {
+    meta.set(key, value);
   }
 
   // ---------------- sources ----------------

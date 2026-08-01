@@ -133,7 +133,16 @@ export async function requireAdmin(request: Request): Promise<boolean> {
  */
 export function verifyCronAuth(request: Request): boolean {
   const secret = process.env.CRON_SECRET;
-  if (!secret) return true;
+  if (!secret) {
+    // 本番で未設定なら拒否する（fail-closed）。
+    // /api/cron/* は middleware の認証対象外なので、素通しにすると
+    // 誰でも巡回や取込を起動でき、外部サイトへの負荷源にもなる。
+    if (process.env.NODE_ENV === 'production') {
+      console.error('[auth] CRON_SECRET が未設定のため cron エンドポイントを拒否しました。Vercel の環境変数に設定してください。');
+      return false;
+    }
+    return true;
+  }
   const authHeader = request.headers.get('authorization') || '';
   if (authHeader === `Bearer ${secret}`) return true;
   try {

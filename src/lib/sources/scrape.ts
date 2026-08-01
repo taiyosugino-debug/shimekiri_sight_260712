@@ -112,7 +112,7 @@ export function isPathAllowed(rules: RobotsRule[], path: string): boolean {
 }
 
 /** 対象URLが robots.txt 上クロール許可されているか。取得不可時は許可扱い。 */
-async function isAllowedByRobots(targetUrl: string): Promise<boolean> {
+export async function isAllowedByRobots(targetUrl: string): Promise<boolean> {
   let origin: string; let path: string;
   try { const u = new URL(targetUrl); origin = u.origin; path = u.pathname + (u.search || ''); }
   catch { return true; }

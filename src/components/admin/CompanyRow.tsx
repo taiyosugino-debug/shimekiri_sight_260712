@@ -16,6 +16,7 @@ export default function CompanyRow({ company, onChanged }: Props) {
   const [industry, setIndustry] = useState<Industry>(company.industry);
   const [size, setSize] = useState<CompanySize>(company.size);
   const [hpUrl, setHpUrl] = useState(company.hpUrl ?? '');
+  const [recruitUrl, setRecruitUrl] = useState(company.recruitUrl ?? '');
   const [note, setNote] = useState(company.note ?? '');
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -26,6 +27,7 @@ export default function CompanyRow({ company, onChanged }: Props) {
     setIndustry(company.industry);
     setSize(company.size);
     setHpUrl(company.hpUrl ?? '');
+    setRecruitUrl(company.recruitUrl ?? '');
     setNote(company.note ?? '');
     setError(null);
   }
@@ -45,6 +47,7 @@ export default function CompanyRow({ company, onChanged }: Props) {
           industry,
           size,
           hpUrl: hpUrl.trim() || undefined,
+          recruitUrl: recruitUrl.trim() || undefined,
           note: note.trim() || undefined,
         },
       });
@@ -109,6 +112,18 @@ export default function CompanyRow({ company, onChanged }: Props) {
                 <label className="label">HP URL</label>
                 <input className="input" value={hpUrl} onChange={(e) => setHpUrl(e.target.value)} />
               </div>
+            </div>
+            <div>
+              <label className="label">採用ページURL（週次巡回の対象）</label>
+              <input
+                className="input"
+                value={recruitUrl}
+                onChange={(e) => setRecruitUrl(e.target.value)}
+                placeholder="https://example.co.jp/recruit/"
+              />
+              <p className="mt-1 text-xs text-slate-500">
+                空欄の場合は HP URL を巡回します。締切が載っているページを直接指定すると精度が上がります。
+              </p>
             </div>
             <div>
               <label className="label">メモ</label>

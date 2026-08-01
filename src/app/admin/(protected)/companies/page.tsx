@@ -19,6 +19,7 @@ export default function AdminCompaniesPage() {
   const [industry, setIndustry] = useState<Industry>(INDUSTRIES[0]);
   const [size, setSize] = useState<CompanySize>(COMPANY_SIZES[0]);
   const [hpUrl, setHpUrl] = useState('');
+  const [recruitUrl, setRecruitUrl] = useState('');
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
@@ -55,10 +56,17 @@ export default function AdminCompaniesPage() {
     try {
       await adminFetch('/api/admin/companies', {
         method: 'POST',
-        body: { name: name.trim(), industry, size, hpUrl: hpUrl.trim() || undefined },
+        body: {
+          name: name.trim(),
+          industry,
+          size,
+          hpUrl: hpUrl.trim() || undefined,
+          recruitUrl: recruitUrl.trim() || undefined,
+        },
       });
       setName('');
       setHpUrl('');
+      setRecruitUrl('');
       await load();
     } catch (e) {
       setCreateError(errorMessage(e));
@@ -118,6 +126,18 @@ export default function AdminCompaniesPage() {
               HP URL（任意）
             </label>
             <input id="newHpUrl" className="input" value={hpUrl} onChange={(e) => setHpUrl(e.target.value)} />
+          </div>
+          <div>
+            <label htmlFor="newRecruitUrl" className="label">
+              採用ページURL（任意・週次巡回の対象）
+            </label>
+            <input
+              id="newRecruitUrl"
+              className="input"
+              value={recruitUrl}
+              onChange={(e) => setRecruitUrl(e.target.value)}
+              placeholder="https://example.co.jp/recruit/"
+            />
           </div>
         </div>
         <button type="submit" className="btn-primary" disabled={creating}>

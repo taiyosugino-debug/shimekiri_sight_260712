@@ -11,6 +11,9 @@ import {
   CompanyInput,
   Entry,
   EntryInput,
+  parseReviewDecision,
+  ReviewItem,
+  ReviewItemInput,
   Source,
   SourceInput,
   SourceRuntimePatch,
@@ -23,8 +26,49 @@ const CACHE_TTL_MS = 60 * 1000;
 const TAB_COMPANIES = 'companies';
 const TAB_ENTRIES = 'entries';
 const TAB_SOURCES = 'sources';
+const TAB_REVIEW = 'review';
+const TAB_META = 'meta';
 
-const COMPANIES_HEADER = ['id', 'name', 'industry', 'size', 'hp_url', 'note', 'created_at', 'updated_at', 'deleted'];
+const COMPANIES_HEADER = [
+  'id',
+  'name',
+  'industry',
+  'size',
+  'hp_url',
+  'note',
+  'created_at',
+  'updated_at',
+  'deleted',
+  // 追加分（採用ページURL。既存シート互換のため末尾に追加）
+  'recruit_url',
+];
+
+// review タブ: 巡回結果の「要確認リスト」。人が「承認」列に OK / NG を書き込む。
+// 人が読む前提のタブなので、人が触る列（承認）を左寄りの読みやすい位置に置いている。
+const REVIEW_HEADER = [
+  'id',
+  '承認',
+  'confidence',
+  'company_name',
+  'title',
+  'deadline_text',
+  'deadline_at',
+  'type',
+  'reasons',
+  'page_url',
+  'company_id',
+  'entry_id',
+  'previous_deadline_at',
+  'content_hash',
+  'first_seen_at',
+  'last_seen_at',
+  'created_at',
+  'updated_at',
+  'deleted',
+];
+
+// meta タブ: 巡回カーソルなど少量の状態を key-value で保持する
+const META_HEADER = ['key', 'value', 'updated_at'];
 const ENTRIES_HEADER = [
   'id',
   'company_id',
@@ -212,7 +256,7 @@ export async function ensureInitialized(): Promise<void> {
     const existingTitles = new Set((meta.sheets ?? []).map((s) => s.properties?.title).filter(Boolean));
 
     const tabsToCreate: string[] = [];
-    for (const tab of [TAB_COMPANIES, TAB_ENTRIES, TAB_SOURCES]) {
+    for (const tab of [TAB_COMPANIES, TAB_ENTRIES, TAB_SOURCES, TAB_REVIEW, TAB_META]) {
       if (!existingTitles.has(tab)) tabsToCreate.push(tab);
     }
 
@@ -230,6 +274,8 @@ export async function ensureInitialized(): Promise<void> {
       { tab: TAB_COMPANIES, header: COMPANIES_HEADER },
       { tab: TAB_ENTRIES, header: ENTRIES_HEADER },
       { tab: TAB_SOURCES, header: SOURCES_HEADER },
+      { tab: TAB_REVIEW, header: REVIEW_HEADER },
+      { tab: TAB_META, header: META_HEADER },
     ];
     for (const { tab, header } of headerWrites) {
       const range = `${tab}!A1:${colLetter(header.length)}1`;
@@ -268,6 +314,8 @@ interface RawTables {
   companies: string[][];
   entries: string[][];
   sources: string[][];
+  review: string[][];
+  meta: string[][];
 }
 
 let cache: { data: RawTables; expiresAt: number } | null = null;
@@ -282,17 +330,19 @@ async function fetchAllTables(): Promise<RawTables> {
 
   await ensureInitialized();
   const { spreadsheetId } = getEnv();
-  const ranges = [TAB_COMPANIES, TAB_ENTRIES, TAB_SOURCES]
+  const ranges = [TAB_COMPANIES, TAB_ENTRIES, TAB_SOURCES, TAB_REVIEW, TAB_META]
     .map((t) => `ranges=${encodeURIComponent(t)}`)
     .join('&');
   const data = await sheetsJson<{ valueRanges?: { values?: string[][] }[] }>(
     `${SHEETS_API_BASE}/${spreadsheetId}/values:batchGet?${ranges}`,
   );
-  const [companiesRaw, entriesRaw, sourcesRaw] = data.valueRanges ?? [];
+  const [companiesRaw, entriesRaw, sourcesRaw, reviewRaw, metaRaw] = data.valueRanges ?? [];
   const result: RawTables = {
     companies: companiesRaw?.values ?? [],
     entries: entriesRaw?.values ?? [],
     sources: sourcesRaw?.values ?? [],
+    review: reviewRaw?.values ?? [],
+    meta: metaRaw?.values ?? [],
   };
   cache = { data: result, expiresAt: now + CACHE_TTL_MS };
   return result;
@@ -310,7 +360,7 @@ function dataRows(table: string[][]): { rowNumber: number; cells: string[] }[] {
 // ---------------- 行 <-> エンティティ 変換 ----------------
 
 function rowToCompany(cells: string[]): Company | null {
-  const [id, name, industry, size, hpUrl, note, createdAt, updatedAt, deleted] = cells;
+  const [id, name, industry, size, hpUrl, note, createdAt, updatedAt, deleted, recruitUrl] = cells;
   if (cellToBool(deleted)) return null;
   if (!id) return null;
   return {
@@ -319,6 +369,7 @@ function rowToCompany(cells: string[]): Company | null {
     industry: cellOrEmpty(industry) as Company['industry'],
     size: cellOrEmpty(size) as Company['size'],
     hpUrl: emptyToUndefined(hpUrl),
+    recruitUrl: emptyToUndefined(recruitUrl),
     note: emptyToUndefined(note),
     createdAt: cellOrEmpty(createdAt),
     updatedAt: cellOrEmpty(updatedAt),
@@ -336,6 +387,7 @@ function companyToRow(c: Company, deleted = false): string[] {
     c.createdAt,
     c.updatedAt,
     boolToCell(deleted),
+    cellOrEmpty(c.recruitUrl),
   ];
 }
 
@@ -451,6 +503,77 @@ function sourceToRow(s: Source, deleted = false): string[] {
   ];
 }
 
+function rowToReviewItem(cells: string[]): ReviewItem | null {
+  const [
+    id,
+    decision,
+    confidence,
+    companyName,
+    title,
+    deadlineText,
+    deadlineAt,
+    type,
+    reasons,
+    pageUrl,
+    companyId,
+    entryId,
+    previousDeadlineAt,
+    contentHash,
+    firstSeenAt,
+    lastSeenAt,
+    createdAt,
+    updatedAt,
+    deleted,
+  ] = cells;
+  if (cellToBool(deleted)) return null;
+  if (!id) return null;
+  return {
+    id,
+    // 人が手で書いた表記ゆれ（OK / ○ / はい 等）をここで正規化する
+    decision: parseReviewDecision(decision),
+    confidence: (cellOrEmpty(confidence) || '低') as ReviewItem['confidence'],
+    companyName: cellOrEmpty(companyName),
+    title: cellOrEmpty(title),
+    deadlineText: cellOrEmpty(deadlineText),
+    deadlineAt: emptyToUndefined(deadlineAt),
+    type: emptyToUndefined(type) as ReviewItem['type'],
+    reasons: cellOrEmpty(reasons),
+    pageUrl: cellOrEmpty(pageUrl),
+    companyId: cellOrEmpty(companyId),
+    entryId: emptyToUndefined(entryId),
+    previousDeadlineAt: emptyToUndefined(previousDeadlineAt),
+    contentHash: cellOrEmpty(contentHash),
+    firstSeenAt: cellOrEmpty(firstSeenAt),
+    lastSeenAt: cellOrEmpty(lastSeenAt),
+    createdAt: cellOrEmpty(createdAt),
+    updatedAt: cellOrEmpty(updatedAt),
+  };
+}
+
+function reviewItemToRow(r: ReviewItem, deleted = false): string[] {
+  return [
+    r.id,
+    r.decision,
+    r.confidence,
+    r.companyName,
+    r.title,
+    r.deadlineText,
+    cellOrEmpty(r.deadlineAt),
+    cellOrEmpty(r.type),
+    r.reasons,
+    r.pageUrl,
+    r.companyId,
+    cellOrEmpty(r.entryId),
+    cellOrEmpty(r.previousDeadlineAt),
+    r.contentHash,
+    r.firstSeenAt,
+    r.lastSeenAt,
+    r.createdAt,
+    r.updatedAt,
+    boolToCell(deleted),
+  ];
+}
+
 // ---------------- 汎用 upsert ヘルパ ----------------
 
 interface FoundRow {
@@ -527,6 +650,7 @@ export class GSheetsStore implements Store {
       industry: input.industry,
       size: input.size,
       hpUrl: input.hpUrl,
+      recruitUrl: input.recruitUrl,
       note: input.note,
       createdAt: now,
       updatedAt: now,
@@ -581,6 +705,13 @@ export class GSheetsStore implements Store {
       difficulty: input.difficulty,
       applyUrl: input.applyUrl,
       description: input.description,
+      // これらが欠けていると entryToRow で常に空欄になり、
+      // 取り込んだ Entry から出典ページを辿れなくなる
+      sourceUrl: input.sourceUrl,
+      selectionFlow: input.selectionFlow,
+      webTest: input.webTest,
+      eventSchedule: input.eventSchedule,
+      eventPeriod: input.eventPeriod,
       status: input.status ?? 'draft',
       pickup: input.pickup ?? false,
       source: input.source ?? 'manual',
@@ -609,6 +740,90 @@ export class GSheetsStore implements Store {
     const deletedRow = { ...existing, updatedAt: nowIso() };
     await updateRow(TAB_ENTRIES, found.rowNumber, entryToRow(deletedRow, true), ENTRIES_HEADER.length);
     return true;
+  }
+
+  // ---------------- review（要確認リスト） ----------------
+
+  async listReviewItems(): Promise<ReviewItem[]> {
+    const tables = await fetchAllTables();
+    return dataRows(tables.review)
+      .map((r) => rowToReviewItem(r.cells))
+      .filter((r): r is ReviewItem => r !== null);
+  }
+
+  async getReviewItem(id: string): Promise<ReviewItem | null> {
+    const list = await this.listReviewItems();
+    return list.find((r) => r.id === id) ?? null;
+  }
+
+  async createReviewItem(input: ReviewItemInput & { id?: string }): Promise<ReviewItem> {
+    const now = nowIso();
+    const item: ReviewItem = {
+      id: input.id || genId('rv'),
+      companyId: input.companyId,
+      companyName: input.companyName,
+      pageUrl: input.pageUrl,
+      title: input.title,
+      deadlineText: input.deadlineText,
+      deadlineAt: input.deadlineAt,
+      type: input.type,
+      confidence: input.confidence,
+      reasons: input.reasons,
+      decision: input.decision ?? '未確認',
+      entryId: input.entryId,
+      previousDeadlineAt: input.previousDeadlineAt,
+      contentHash: input.contentHash,
+      firstSeenAt: input.firstSeenAt ?? now,
+      lastSeenAt: input.lastSeenAt ?? now,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await ensureInitialized();
+    await appendRow(TAB_REVIEW, reviewItemToRow(item));
+    return item;
+  }
+
+  async updateReviewItem(id: string, patch: Partial<ReviewItemInput>): Promise<ReviewItem | null> {
+    await ensureInitialized();
+    const found = await findRowByIdFresh(TAB_REVIEW, id, REVIEW_HEADER.length);
+    if (!found) return null;
+    const current = rowToReviewItem(found.cells);
+    if (!current) return null;
+    const updated: ReviewItem = { ...current, ...patch, updatedAt: nowIso() };
+    await updateRow(TAB_REVIEW, found.rowNumber, reviewItemToRow(updated), REVIEW_HEADER.length);
+    return updated;
+  }
+
+  async deleteReviewItem(id: string): Promise<boolean> {
+    await ensureInitialized();
+    const found = await findRowByIdFresh(TAB_REVIEW, id, REVIEW_HEADER.length);
+    if (!found) return false;
+    const current = rowToReviewItem(found.cells);
+    if (!current) return false;
+    await updateRow(TAB_REVIEW, found.rowNumber, reviewItemToRow(current, true), REVIEW_HEADER.length);
+    return true;
+  }
+
+  // ---------------- meta（巡回カーソル等） ----------------
+
+  async getMeta(key: string): Promise<string | null> {
+    const tables = await fetchAllTables();
+    for (const { cells } of dataRows(tables.meta)) {
+      if ((cells[0] ?? '') === key) return cells[1] ?? '';
+    }
+    return null;
+  }
+
+  async setMeta(key: string, value: string): Promise<void> {
+    await ensureInitialized();
+    // meta は id 列ではなく key 列で引くため findRowByIdFresh をそのまま使える
+    const found = await findRowByIdFresh(TAB_META, key, META_HEADER.length);
+    const row = [key, value, nowIso()];
+    if (found) {
+      await updateRow(TAB_META, found.rowNumber, row, META_HEADER.length);
+    } else {
+      await appendRow(TAB_META, row);
+    }
   }
 
   // ---------------- sources ----------------

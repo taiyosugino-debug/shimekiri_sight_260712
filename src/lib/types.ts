@@ -37,6 +37,8 @@ export interface Company {
   industry: Industry;
   size: CompanySize;
   hpUrl?: string;
+  /** 採用ページURL。巡回（週次クロール）の対象。未設定なら hpUrl を使う */
+  recruitUrl?: string;
   note?: string;
   createdAt: string; // ISO8601
   updatedAt: string;
@@ -94,6 +96,96 @@ export interface Source {
   updatedAt: string;
 }
 
+// ---------------- 巡回（週次クロール）と要確認リスト ----------------
+
+/** 抽出結果の確信度。低いほど人の確認が必要 */
+export const CONFIDENCES = ['高', '中', '低'] as const;
+export type Confidence = (typeof CONFIDENCES)[number];
+
+/** 人が付ける承認状態。シートの「承認」列に対応する */
+export const REVIEW_DECISIONS = ['未確認', '承認', '却下', '取込済'] as const;
+export type ReviewDecision = (typeof REVIEW_DECISIONS)[number];
+
+/**
+ * 巡回で見つけた「締切かもしれない情報」1件。
+ * entries には直接入れず、まず review タブに全件書き出して人が確認する。
+ * 「怪しいものだけ出す」のではなく全件出して印を付ける方針（取れずに漏れた社を見逃さないため）。
+ */
+export interface ReviewItem {
+  id: string;
+  companyId: string;
+  /** シート上で人が読むための企業名（非正規化。表示専用） */
+  companyName: string;
+  /** 巡回したページのURL */
+  pageUrl: string;
+  /** 抽出した見出し・前後の文脈 */
+  title: string;
+  /** ページ上で見つけた締切らしき生テキスト */
+  deadlineText: string;
+  /** 解釈できた場合の締切 ISO8601(+09:00)。できなければ空 */
+  deadlineAt?: string;
+  /** 推測できた種別。できなければ空 */
+  type?: EntryType;
+  confidence: Confidence;
+  /** なぜ要確認なのかの理由（人が読む用。' / ' 区切り） */
+  reasons: string;
+  /** 人が付ける承認状態。シートの「承認」列 */
+  decision: ReviewDecision;
+  /** 取込済の場合に作られた Entry の id */
+  entryId?: string;
+  /** 前回巡回時の締切（変化検知用） */
+  previousDeadlineAt?: string;
+  /** ページ本文のハッシュ（変化検知用） */
+  contentHash: string;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ReviewItemInput {
+  companyId: string;
+  companyName: string;
+  pageUrl: string;
+  title: string;
+  deadlineText: string;
+  deadlineAt?: string;
+  type?: EntryType;
+  confidence: Confidence;
+  reasons: string;
+  decision?: ReviewDecision;
+  entryId?: string;
+  previousDeadlineAt?: string;
+  contentHash: string;
+  firstSeenAt?: string;
+  lastSeenAt?: string;
+}
+
+/** 1社を巡回した結果 */
+export interface CrawlCompanyResult {
+  companyId: string;
+  companyName: string;
+  pageUrl: string;
+  /** 見つけた候補の件数 */
+  found: number;
+  created: number;
+  updated: number;
+  /** 取得や解析に失敗した場合の理由 */
+  error?: string;
+  /** robots.txt により巡回を中止した場合 true */
+  robotsBlocked?: boolean;
+}
+
+/** 巡回バッチ1回分の結果 */
+export interface CrawlRunResult {
+  startedAt: string;
+  processed: number;
+  /** 次に処理を再開する企業インデックス。全件終わったら null */
+  nextCursor: number | null;
+  done: boolean;
+  results: CrawlCompanyResult[];
+}
+
 // ---------------- 入力型 ----------------
 
 export interface CompanyInput {
@@ -101,6 +193,7 @@ export interface CompanyInput {
   industry: Industry;
   size: CompanySize;
   hpUrl?: string;
+  recruitUrl?: string;
   note?: string;
 }
 
@@ -193,6 +286,16 @@ export interface Store {
   updateEntry(id: string, patch: Partial<EntryInput>): Promise<Entry | null>;
   deleteEntry(id: string): Promise<boolean>;
 
+  listReviewItems(): Promise<ReviewItem[]>;
+  getReviewItem(id: string): Promise<ReviewItem | null>;
+  createReviewItem(input: ReviewItemInput & { id?: string }): Promise<ReviewItem>;
+  updateReviewItem(id: string, patch: Partial<ReviewItemInput>): Promise<ReviewItem | null>;
+  deleteReviewItem(id: string): Promise<boolean>;
+
+  /** 巡回カーソルなど、少量の状態を key-value で保存する */
+  getMeta(key: string): Promise<string | null>;
+  setMeta(key: string, value: string): Promise<void>;
+
   listSources(): Promise<Source[]>;
   getSource(id: string): Promise<Source | null>;
   createSource(input: SourceInput & { id?: string }): Promise<Source>;
@@ -216,6 +319,24 @@ export function isEntryStatus(v: unknown): v is EntryStatus {
 }
 export function isSourceType(v: unknown): v is SourceType {
   return typeof v === 'string' && (SOURCE_TYPES as readonly string[]).includes(v);
+}
+export function isConfidence(v: unknown): v is Confidence {
+  return typeof v === 'string' && (CONFIDENCES as readonly string[]).includes(v);
+}
+
+/**
+ * シートの「承認」列に人が手で書いた文字列を ReviewDecision に正規化する。
+ * 表記ゆれ（OK / ok / ○ / 〇 / o / はい など）を広く受け入れる。
+ * 解釈できない文字列は安全側に倒して '未確認' とする（勝手に公開しないため）。
+ */
+export function parseReviewDecision(v: unknown): ReviewDecision {
+  if (typeof v !== 'string') return '未確認';
+  const s = v.trim().toLowerCase();
+  if (s === '') return '未確認';
+  if (['取込済', 'imported', 'done'].includes(s)) return '取込済';
+  if (['ok', 'o', '○', '〇', '承認', 'yes', 'y', 'はい', 'true', '1'].includes(s)) return '承認';
+  if (['ng', 'x', '×', '✕', '却下', 'no', 'n', 'いいえ', 'false', '0'].includes(s)) return '却下';
+  return '未確認';
 }
 
 /** 難易度を ★★★☆☆ 形式に */

@@ -16,6 +16,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/admin/entries', label: '締切管理', icon: '🗂️' },
   { href: '/admin/companies', label: '企業', icon: '🏢' },
   { href: '/admin/import', label: 'CSVインポート', icon: '📥' },
+  { href: '/admin/review', label: '要確認', icon: '🔎' },
   { href: '/admin/sources', label: '自動取込', icon: '🔁' },
 ];
 

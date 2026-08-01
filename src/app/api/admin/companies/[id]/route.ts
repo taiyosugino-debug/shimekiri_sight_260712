@@ -63,6 +63,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     patch.hpUrl = typeof hpUrl === 'string' && hpUrl.trim() ? hpUrl.trim() : undefined;
   }
 
+  if ('recruitUrl' in b) {
+    const recruitUrl = b.recruitUrl;
+    if (recruitUrl !== undefined && recruitUrl !== null && typeof recruitUrl !== 'string') {
+      return NextResponse.json({ error: '採用ページURL が不正です' }, { status: 400 });
+    }
+    patch.recruitUrl =
+      typeof recruitUrl === 'string' && recruitUrl.trim() ? recruitUrl.trim() : undefined;
+  }
+
   if ('note' in b) {
     const note = b.note;
     if (note !== undefined && note !== null && typeof note !== 'string') {

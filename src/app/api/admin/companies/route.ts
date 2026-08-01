@@ -48,9 +48,13 @@ export async function POST(request: Request) {
   }
 
   const hpUrl = b.hpUrl;
+  const recruitUrl = b.recruitUrl;
   const note = b.note;
   if (hpUrl !== undefined && hpUrl !== null && typeof hpUrl !== 'string') {
     return NextResponse.json({ error: 'HP URL が不正です' }, { status: 400 });
+  }
+  if (recruitUrl !== undefined && recruitUrl !== null && typeof recruitUrl !== 'string') {
+    return NextResponse.json({ error: '採用ページURL が不正です' }, { status: 400 });
   }
   if (note !== undefined && note !== null && typeof note !== 'string') {
     return NextResponse.json({ error: '備考が不正です' }, { status: 400 });
@@ -62,6 +66,7 @@ export async function POST(request: Request) {
     industry,
     size,
     hpUrl: typeof hpUrl === 'string' && hpUrl.trim() ? hpUrl.trim() : undefined,
+    recruitUrl: typeof recruitUrl === 'string' && recruitUrl.trim() ? recruitUrl.trim() : undefined,
     note: typeof note === 'string' && note.trim() ? note.trim() : undefined,
   });
 
