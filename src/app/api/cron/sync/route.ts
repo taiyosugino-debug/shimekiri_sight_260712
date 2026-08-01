@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getStore } from '@/lib/store';
 import { verifyCronAuth } from '@/lib/auth';
+import { jstParts } from '@/lib/date';
 import { runSource } from '@/lib/sources';
 import { sendSlack } from '@/lib/slack';
 import { SyncResult } from '@/lib/types';
@@ -15,6 +16,20 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: Request) {
   if (!verifyCronAuth(request)) {
     return NextResponse.json({ error: '認証が必要です' }, { status: 401 });
+  }
+
+  // 週次実行：毎週火曜（JST）のみ本処理を行う。cron 自体は日次で起動してよいが、
+  // 火曜(JST)以外はスキップする（Vercel のプラン差異に依存せず曜日を固定するため）。
+  // 手動確認したい場合は ?force=1 を付与する。
+  const url = new URL(request.url);
+  const force = url.searchParams.get('force') === '1';
+  const jstDow = jstParts(new Date()).dow; // 0=日, 2=火
+  if (jstDow !== 2 && !force) {
+    return NextResponse.json({
+      skipped: true,
+      reason: '週次実行（毎週火曜・JST）のため、火曜以外はスキップしました',
+      weekdayJst: jstDow,
+    });
   }
 
   const store = getStore();
