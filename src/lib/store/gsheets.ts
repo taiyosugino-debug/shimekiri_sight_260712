@@ -93,8 +93,46 @@ function getEnv(): { spreadsheetId: string; email: string; privateKey: string } 
   if (!spreadsheetId || !email || !rawKey) {
     throw new Error('gsheets バックエンドの必須環境変数が不足しています');
   }
-  const privateKey = rawKey.replace(/\\n/g, '\n');
-  return { spreadsheetId, email, privateKey };
+  return {
+    spreadsheetId: spreadsheetId.trim(),
+    email: email.trim(),
+    privateKey: normalizePrivateKey(rawKey),
+  };
+}
+
+/**
+ * 環境変数に貼り付けられたサービスアカウント秘密鍵を正規化する。
+ * Vercel のダッシュボードへ貼る際によくあるブレを吸収する。
+ *  - JSON からコピーした \n エスケープ形式
+ *  - 実際の改行を含む複数行形式
+ *  - 前後にダブルクォート／シングルクォートが付いたまま貼られたケース
+ *  - CRLF 改行、前後の余分な空白
+ */
+export function normalizePrivateKey(raw: string): string {
+  let key = raw.trim();
+  if (key.length >= 2) {
+    const first = key[0];
+    const last = key[key.length - 1];
+    if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
+      key = key.slice(1, -1);
+    }
+  }
+  key = key
+    .replace(/\\r\\n/g, '\n')
+    .replace(/\\n/g, '\n')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .trim();
+  if (!key.endsWith('\n')) key += '\n';
+  if (!key.startsWith('-----BEGIN') || !key.includes('PRIVATE KEY-----')) {
+    // ここで落としておくと、OpenSSL の "DECODER routines::unsupported" という
+    // 原因の分かりにくいエラーではなく、何を直せばよいかが分かる形で失敗する。
+    throw new Error(
+      'GOOGLE_PRIVATE_KEY の形式が不正です。サービスアカウントの JSON ファイル内 private_key の値' +
+        '（-----BEGIN PRIVATE KEY----- で始まり -----END PRIVATE KEY----- で終わる文字列）を設定してください。',
+    );
+  }
+  return key;
 }
 
 let cachedClient: JWT | null = null;
