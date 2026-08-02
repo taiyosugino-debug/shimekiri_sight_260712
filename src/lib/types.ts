@@ -171,6 +171,8 @@ export interface CrawlCompanyResult {
   pageUrl: string;
   /** 見つけた候補の件数 */
   found: number;
+  /** 実際に取得したページのURL一覧（起点＋たどった下層） */
+  visitedUrls?: string[];
   created: number;
   updated: number;
   /** 取得や解析に失敗した場合の理由 */

@@ -441,7 +441,7 @@ export async function crawlCompany(
       decision: '未確認',
       firstSeenAt: nowIso(),
     });
-    return { ...base, found: candidates.length, created: 1 };
+    return { ...base, found: candidates.length, created: 1, visitedUrls: visited };
   }
 
   // --- 既存行の更新 ---
@@ -477,7 +477,7 @@ export async function crawlCompany(
   }
 
   await store.updateReviewItem(existing.id, input);
-  return { ...base, found: candidates.length, updated: 1 };
+  return { ...base, found: candidates.length, updated: 1, visitedUrls: visited };
 }
 
 export interface RunCrawlOptions {
