@@ -116,8 +116,10 @@ export interface ReviewItem {
   companyId: string;
   /** シート上で人が読むための企業名（非正規化。表示専用） */
   companyName: string;
-  /** 巡回したページのURL */
+  /** 巡回の起点にしたページのURL（企業マスターの採用ページURL。行を特定するキー） */
   pageUrl: string;
+  /** 実際に締切を見つけたページのURL。下層リンクをたどった場合は pageUrl と異なる */
+  foundOnUrl?: string;
   /** 抽出した見出し・前後の文脈 */
   title: string;
   /** ページ上で見つけた締切らしき生テキスト */
@@ -147,6 +149,7 @@ export interface ReviewItemInput {
   companyId: string;
   companyName: string;
   pageUrl: string;
+  foundOnUrl?: string;
   title: string;
   deadlineText: string;
   deadlineAt?: string;

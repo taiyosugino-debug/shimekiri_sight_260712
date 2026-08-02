@@ -65,6 +65,8 @@ const REVIEW_HEADER = [
   'created_at',
   'updated_at',
   'deleted',
+  // 追加分（実際に締切を見つけたページ。既存シート互換のため末尾に追加）
+  'found_on_url',
 ];
 
 // meta タブ: 巡回カーソルなど少量の状態を key-value で保持する
@@ -524,11 +526,13 @@ function rowToReviewItem(cells: string[]): ReviewItem | null {
     createdAt,
     updatedAt,
     deleted,
+    foundOnUrl,
   ] = cells;
   if (cellToBool(deleted)) return null;
   if (!id) return null;
   return {
     id,
+    foundOnUrl: emptyToUndefined(foundOnUrl),
     // 人が手で書いた表記ゆれ（OK / ○ / はい 等）をここで正規化する
     decision: parseReviewDecision(decision),
     confidence: (cellOrEmpty(confidence) || '低') as ReviewItem['confidence'],
@@ -571,6 +575,7 @@ function reviewItemToRow(r: ReviewItem, deleted = false): string[] {
     r.createdAt,
     r.updatedAt,
     boolToCell(deleted),
+    cellOrEmpty(r.foundOnUrl),
   ];
 }
 
@@ -763,6 +768,7 @@ export class GSheetsStore implements Store {
       companyId: input.companyId,
       companyName: input.companyName,
       pageUrl: input.pageUrl,
+      foundOnUrl: input.foundOnUrl,
       title: input.title,
       deadlineText: input.deadlineText,
       deadlineAt: input.deadlineAt,

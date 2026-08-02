@@ -42,7 +42,7 @@ const MAX_HTML_BYTES = 2 * 1024 * 1024;
  * robots.txt 取得と本文取得はそれぞれ独立にタイムアウトを持つため、
  * これが無いと1社で最悪90秒近くかかり、関数が強制終了してカーソルが進まなくなる。
  */
-export const PER_COMPANY_TIMEOUT_MS = 12_000;
+export const PER_COMPANY_TIMEOUT_MS = 25_000;
 
 /** 巡回してはいけないホスト（内部ネットワーク・クラウドのメタデータ等） */
 const BLOCKED_HOSTNAMES = new Set(['localhost', '127.0.0.1', '0.0.0.0', '::1', '[::1]', 'metadata.google.internal']);
@@ -149,13 +149,165 @@ export function htmlToText(html: string): { text: string; pageTitle: string } {
   return { text, pageTitle };
 }
 
+// ---------------- 下層ページのリンク選定 ----------------
+
+/**
+ * リンク文言に含まれていたら「締切が載っていそうなページ」とみなす語。
+ * 数字が大きいほど優先して巡回する。
+ */
+const LINK_HINTS: { words: string[]; score: number }[] = [
+  { words: ['募集要項', 'エントリー', '応募', '選考フロー', '選考について'], score: 5 },
+  { words: ['インターン', 'インターンシップ'], score: 4 },
+  { words: ['スケジュール', '選考', '説明会', 'イベント'], score: 3 },
+  { words: ['お知らせ', 'ニュース', '新着'], score: 2 },
+  { words: ['新卒', '採用情報'], score: 1 },
+];
+
+/** 巡回しても意味がない・巡回すべきでないリンク */
+const LINK_BLOCK_WORDS = [
+  'キャリア採用',
+  '中途',
+  '経験者',
+  'アルバイト',
+  '派遣',
+  'プライバシー',
+  '個人情報',
+  'サイトマップ',
+  'お問い合わせ',
+  'よくある質問',
+  'FAQ',
+  'ログイン',
+  'マイページ',
+];
+
+/** 1社あたりで追加巡回する下層ページの最大数 */
+export const MAX_SUB_PAGES = 3;
+
+/**
+ * 2つのURLが同じサイトとみなせるか。
+ * career.mitsui.com と www.mitsui.com のように、採用ページが
+ * サブドメインに分かれている構成を許容しつつ、外部サイトへは出ない。
+ */
+export function isSameSite(a: string, b: string): boolean {
+  try {
+    return registrableDomain(new URL(a).hostname) === registrableDomain(new URL(b).hostname);
+  } catch {
+    return false;
+  }
+}
+
+/** ざっくりした登録可能ドメインの取り出し（co.jp 等の2段階TLDに対応） */
+function registrableDomain(hostname: string): string {
+  const parts = hostname.toLowerCase().split('.');
+  if (parts.length <= 2) return parts.join('.');
+  const secondLevel = ['co', 'or', 'ne', 'ac', 'go', 'gr', 'ed', 'lg', 'com', 'net', 'org'];
+  const tld = parts[parts.length - 1];
+  const sld = parts[parts.length - 2];
+  if (tld.length === 2 && secondLevel.includes(sld)) return parts.slice(-3).join('.');
+  return parts.slice(-2).join('.');
+}
+
+/**
+ * 起点ページから「締切が載っていそうな下層ページ」を選ぶ。
+ * リンク文言でスコアを付け、同一サイト内のものだけを上位から返す。
+ */
+export function pickSubPageLinks(html: string, baseUrl: string, limit = MAX_SUB_PAGES): string[] {
+  const $ = cheerio.load(html);
+  const scored = new Map<string, number>();
+
+  $('a[href]').each((_i, el) => {
+    const href = $(el).attr('href');
+    if (!href) return;
+    const label = normalizeWhitespace($(el).text());
+    if (!label) return;
+    if (LINK_BLOCK_WORDS.some((w) => label.includes(w))) return;
+
+    let abs: string;
+    try {
+      const u = new URL(href, baseUrl);
+      if (u.protocol !== 'http:' && u.protocol !== 'https:') return;
+      if (isBlockedHost(u.hostname)) return;
+      u.hash = '';
+      abs = u.toString();
+    } catch {
+      return;
+    }
+    if (abs === baseUrl) return;
+    if (!isSameSite(abs, baseUrl)) return;
+    // 画像・PDF等は本文抽出できないので対象外
+    if (/\.(pdf|jpe?g|png|gif|svg|zip|docx?|xlsx?)$/i.test(new URL(abs).pathname)) return;
+
+    let score = 0;
+    for (const hint of LINK_HINTS) {
+      if (hint.words.some((w) => label.includes(w))) score = Math.max(score, hint.score);
+    }
+    if (score === 0) return;
+    scored.set(abs, Math.max(scored.get(abs) ?? 0, score));
+  });
+
+  return [...scored.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([url]) => url);
+}
+
 /** review 行を一意に特定するキー（企業 × ページURL） */
 export function reviewKey(companyId: string, pageUrl: string): string {
   return `${companyId} ${pageUrl}`;
 }
 
+/** URL からHTMLを取得する。取得できなければ null（呼び出し側で握りつぶせるように） */
+async function fetchPage(url: string): Promise<string | null> {
+  const res = await fetchWithTimeout(url);
+  if (!res.ok) return null;
+  const lenHeader = res.headers.get('content-length');
+  if (lenHeader && Number(lenHeader) > MAX_HTML_BYTES) return null;
+  return decodeHtml(res, MAX_HTML_BYTES);
+}
+
+/** 1ページを解析した結果 */
+interface PageAnalysis {
+  url: string;
+  text: string;
+  pageTitle: string;
+  candidates: ReturnType<typeof findDateCandidates>;
+  judgement: ReturnType<typeof judgeCandidates>;
+}
+
+function analysePage(
+  url: string,
+  text: string,
+  pageTitle: string,
+  previousDeadlineAt: string | undefined,
+  now: Date,
+): PageAnalysis {
+  const candidates = findDateCandidates(text);
+  return {
+    url,
+    text,
+    pageTitle,
+    candidates,
+    judgement: judgeCandidates({ candidates, previousDeadlineAt, pageText: text, now }),
+  };
+}
+
+const CONFIDENCE_RANK: Record<string, number> = { 高: 3, 中: 2, 低: 1 };
+
+/** 締切が取れているほう、取れていれば確信度が高いほうを採用する */
+function isBetter(a: PageAnalysis, b: PageAnalysis): boolean {
+  const aHas = Boolean(a.judgement.deadlineAt);
+  const bHas = Boolean(b.judgement.deadlineAt);
+  if (aHas !== bHas) return aHas;
+  if (!aHas) return false;
+  return (CONFIDENCE_RANK[a.judgement.confidence] ?? 0) > (CONFIDENCE_RANK[b.judgement.confidence] ?? 0);
+}
+
 export interface CrawlCompanyOptions {
   now?: Date;
+  /** 下層リンクをたどらない（テスト・負荷調整用） */
+  skipSubPages?: boolean;
+  /** 1社あたりで追加巡回する下層ページ数 */
+  maxSubPages?: number;
   /** テスト用にHTML取得を差し替えるためのフック */
   fetchHtml?: (url: string) => Promise<string>;
   /** テスト用に robots 判定を差し替えるためのフック */
@@ -215,13 +367,40 @@ export async function crawlCompany(
   const hash = contentHash(text);
 
   const existing = existingByKey.get(reviewKey(company.id, pageUrl));
-  const candidates = findDateCandidates(text);
-  const judgement = judgeCandidates({
-    candidates,
-    previousDeadlineAt: existing?.deadlineAt,
-    pageText: text,
-    now,
-  });
+
+  // --- 起点ページを解析 ---
+  let best: PageAnalysis = analysePage(pageUrl, text, pageTitle, existing?.deadlineAt, now);
+  let totalFound = best.candidates.length;
+  const visited: string[] = [pageUrl];
+
+  // --- 起点で締切が取れなければ、下層リンクを1階層だけたどる ---
+  // 採用トップに締切を書かず「募集要項」「インターンシップ」等の下層に書く企業が
+  // 多いため（実測でNRI・CA・三井物産がこのパターン）。
+  // 取れている場合は追加アクセスしない（相手サイトへの負荷を最小限にするため）。
+  if (!best.judgement.deadlineAt && !opts.skipSubPages) {
+    const maxSub = opts.maxSubPages ?? MAX_SUB_PAGES;
+    for (const link of pickSubPageLinks(html, pageUrl, maxSub)) {
+      if (visited.includes(link)) continue;
+      visited.push(link);
+      try {
+        if (!(await robotsCheck(link))) continue;
+        const subHtml = opts.fetchHtml
+          ? await opts.fetchHtml(link)
+          : await fetchPage(link);
+        if (subHtml === null) continue;
+        const sub = htmlToText(subHtml);
+        const analysis = analysePage(link, sub.text, sub.pageTitle, existing?.deadlineAt, now);
+        totalFound += analysis.candidates.length;
+        if (isBetter(analysis, best)) best = analysis;
+        if (best.judgement.deadlineAt && best.judgement.confidence === '高') break;
+      } catch {
+        // 下層ページの失敗で企業ごと落とさない
+      }
+    }
+  }
+
+  const judgement = best.judgement;
+  const candidates = { length: totalFound };
 
   // 前回から本文がまったく変わっていないなら、その旨を理由に足す（人の確認負荷を下げる）
   const reasons = [...judgement.reasons];
@@ -229,7 +408,7 @@ export async function crawlCompany(
     reasons.push('前回の巡回からページの内容に変化はありません');
   }
 
-  const guessedType = guessEntryType(`${pageTitle} ${text.slice(0, 2000)}`);
+  const guessedType = guessEntryType(`${best.pageTitle} ${best.text.slice(0, 2000)}`);
 
   // 機械が毎回上書きしてよい列だけをここに入れる。
   // decision（承認判断）と、人が手で直したかもしれない deadlineAt / type は下で個別に扱う。
@@ -237,7 +416,8 @@ export async function crawlCompany(
     companyId: company.id,
     companyName: company.name,
     pageUrl,
-    title: buildTitle(pageTitle, judgement.chosen, company.name),
+    foundOnUrl: best.url !== pageUrl ? best.url : undefined,
+    title: buildTitle(best.pageTitle, judgement.chosen, company.name),
     deadlineText: judgement.chosen ? judgement.chosen.context : '',
     confidence: judgement.confidence,
     reasons: reasons.join(' / '),
@@ -251,6 +431,7 @@ export async function crawlCompany(
       companyName: company.name,
       pageUrl,
       title: input.title ?? company.name,
+      foundOnUrl: input.foundOnUrl,
       deadlineText: input.deadlineText ?? '',
       confidence: judgement.confidence,
       reasons: input.reasons ?? '',

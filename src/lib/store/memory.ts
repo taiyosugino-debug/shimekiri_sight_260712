@@ -152,6 +152,7 @@ export class MemoryStore implements Store {
       companyId: input.companyId,
       companyName: input.companyName,
       pageUrl: input.pageUrl,
+      foundOnUrl: input.foundOnUrl,
       title: input.title,
       deadlineText: input.deadlineText,
       deadlineAt: input.deadlineAt,

@@ -112,15 +112,31 @@ export function isPathAllowed(rules: RobotsRule[], path: string): boolean {
 }
 
 /** 対象URLが robots.txt 上クロール許可されているか。取得不可時は許可扱い。 */
+/**
+ * robots.txt の判定結果をオリジン単位でキャッシュする。
+ * 1社で複数ページを巡回するようになったため、毎回 robots.txt を取りに行くと
+ * 相手サイトへの余計なアクセスと実行時間の無駄になる。
+ */
+const robotsCache = new Map<string, { rules: RobotsRule[]; expiresAt: number }>();
+const ROBOTS_CACHE_TTL_MS = 10 * 60 * 1000;
+
 export async function isAllowedByRobots(targetUrl: string): Promise<boolean> {
   let origin: string; let path: string;
   try { const u = new URL(targetUrl); origin = u.origin; path = u.pathname + (u.search || ''); }
   catch { return true; }
+  const cached = robotsCache.get(origin);
+  if (cached && cached.expiresAt > Date.now()) {
+    return isPathAllowed(cached.rules, path);
+  }
   try {
     const res = await fetchWithTimeout(`${origin}/robots.txt`);
-    if (!res.ok) return true; // 404 等は「robots 無し＝全許可」
+    if (!res.ok) {
+      robotsCache.set(origin, { rules: [], expiresAt: Date.now() + ROBOTS_CACHE_TTL_MS });
+      return true; // 404 等は「robots 無し＝全許可」
+    }
     const body = await readTextWithLimit(res, 512 * 1024);
     const rules = parseRobots(body);
+    robotsCache.set(origin, { rules, expiresAt: Date.now() + ROBOTS_CACHE_TTL_MS });
     return isPathAllowed(rules, path);
   } catch {
     return true; // 取得失敗時はブロックしない（慣行）

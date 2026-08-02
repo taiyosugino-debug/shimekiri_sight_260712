@@ -198,13 +198,16 @@ export default function ReviewPage() {
 
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <a
-                  href={item.pageUrl}
+                  href={item.foundOnUrl || item.pageUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-xs text-brand-600 hover:underline"
                 >
-                  ページを開いて確認 ↗
+                  {item.foundOnUrl ? '見つけたページを開いて確認 ↗' : 'ページを開いて確認 ↗'}
                 </a>
+                {item.foundOnUrl && (
+                  <span className="text-xs text-slate-400">（採用トップから1階層たどった先で発見）</span>
+                )}
                 <span className="grow" />
                 <button
                   type="button"
