@@ -251,9 +251,14 @@ export function pickSubPageLinks(html: string, baseUrl: string, limit = MAX_SUB_
     .map(([url]) => url);
 }
 
-/** review 行を一意に特定するキー（企業 × ページURL） */
-export function reviewKey(companyId: string, pageUrl: string): string {
-  return `${companyId} ${pageUrl}`;
+/**
+ * review 行を一意に特定するキー。
+ * 1社につき1行とする（巡回の起点URLは企業マスターに1つだけのため）。
+ * 以前は companyId × pageUrl をキーにしていたが、それだと企業の採用ページURLを
+ * 直したときに古いURLの行が消えずに残り、同じ企業が二重に並んでしまう。
+ */
+export function reviewKey(companyId: string): string {
+  return companyId;
 }
 
 /** URL からHTMLを取得する。取得できなければ null（呼び出し側で握りつぶせるように） */
@@ -366,7 +371,7 @@ export async function crawlCompany(
   const { text, pageTitle } = htmlToText(html);
   const hash = contentHash(text);
 
-  const existing = existingByKey.get(reviewKey(company.id, pageUrl));
+  const existing = existingByKey.get(reviewKey(company.id));
 
   // --- 起点ページを解析 ---
   let best: PageAnalysis = analysePage(pageUrl, text, pageTitle, existing?.deadlineAt, now);
@@ -519,10 +524,29 @@ export async function runCrawlBatch(store: Store, opts: RunCrawlOptions = {}): P
   }
   if (cursor < 0 || cursor >= companies.length) cursor = 0;
 
-  // 既存 review 行を一度だけ読み、キーで引けるようにしておく（毎社読み直さない）
+  // 既存 review 行を一度だけ読み、企業IDで引けるようにしておく（毎社読み直さない）。
+  // 同じ企業に複数行がある場合（採用ページURLを変更した等）は、最後に見た行を残して
+  // 残りは重複としてまとめて削除する。
   const existingByKey = new Map<string, ReviewItem>();
+  const duplicates: ReviewItem[] = [];
   for (const item of await store.listReviewItems()) {
-    existingByKey.set(reviewKey(item.companyId, item.pageUrl), item);
+    const key = reviewKey(item.companyId);
+    const prev = existingByKey.get(key);
+    if (!prev) {
+      existingByKey.set(key, item);
+      continue;
+    }
+    // lastSeenAt が新しいほうを残す
+    const keepNew = (item.lastSeenAt ?? '') > (prev.lastSeenAt ?? '');
+    existingByKey.set(key, keepNew ? item : prev);
+    duplicates.push(keepNew ? prev : item);
+  }
+  for (const dup of duplicates) {
+    try {
+      await store.deleteReviewItem(dup.id);
+    } catch {
+      // 重複掃除の失敗で巡回を止めない
+    }
   }
 
   const results: CrawlCompanyResult[] = [];
