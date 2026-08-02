@@ -291,7 +291,12 @@ export function judgeCandidates(input: JudgeInput): Judgement {
 
   const closed = input.pageText ? findClosedMarker(input.pageText) : undefined;
   if (closed) {
-    reasons.push(`ページに「${closed}」という記載があります。募集が終わっている可能性があります`);
+    // 募集が終わっているページから拾った日付は締切ではない（残った開催日等を拾いやすい）。
+    // 日付を採用せず、終了している旨だけを人に伝える。
+    reasons.push(
+      `ページに「${closed}」という記載があります。募集が終わっているため、日付は採用しませんでした`,
+    );
+    return { confidence: '低', reasons };
   }
 
   if (input.candidates.length === 0) {

@@ -264,15 +264,23 @@ export async function crawlCompany(
   }
 
   // --- 既存行の更新 ---
-  // 人が review タブの deadline_at を手で埋めている場合がある（promote がそれを促している）。
-  // 機械が解釈できなかったときに undefined で潰すと、その手入力が毎週消えてしまう。
-  // そのため「機械が値を出せたときだけ」上書きする。
-  if (judgement.deadlineAt) {
+  // 「未確認」= まだ誰も触っていない行は、機械の最新の判断で丸ごと上書きする。
+  // こうしないと、前回機械が誤って入れた締切が空にならず残り続ける
+  // （実測でサイバーエージェントの採用ニュース日付が残ったため）。
+  //
+  // 一方「承認 / 却下 / 取込済」= 人が判断した行は、人が deadline_at を
+  // 手で直している可能性があるため、機械が値を出せたときだけ上書きする。
+  const untouched = existing.decision === '未確認';
+  if (untouched) {
     input.previousDeadlineAt = existing.deadlineAt;
     input.deadlineAt = judgement.deadlineAt;
-  }
-  if (guessedType && !existing.type) {
     input.type = guessedType;
+  } else {
+    if (judgement.deadlineAt) {
+      input.previousDeadlineAt = existing.deadlineAt;
+      input.deadlineAt = judgement.deadlineAt;
+    }
+    if (guessedType && !existing.type) input.type = guessedType;
   }
 
   // 取込済の行で締切が変わったら、未確認に戻して人の目に触れるようにする。
