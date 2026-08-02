@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Company, CompanySize, COMPANY_SIZES, Industry, INDUSTRIES } from '@/lib/types';
 import { adminFetch, errorMessage } from '@/components/admin/adminApi';
@@ -140,9 +142,14 @@ export default function AdminCompaniesPage() {
             />
           </div>
         </div>
-        <button type="submit" className="btn-primary" disabled={creating}>
-          {creating ? '追加中…' : '＋ 企業を追加'}
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <button type="submit" className="btn-primary" disabled={creating}>
+            {creating ? '追加中…' : '＋ 企業を追加'}
+          </button>
+          <Link href="/admin/companies/import" className="text-sm text-brand-600 hover:underline">
+            CSVでまとめて登録・更新する ↗
+          </Link>
+        </div>
       </form>
 
       <ErrorBanner message={error} />
