@@ -216,7 +216,12 @@ export async function crawlCompany(
 
   const existing = existingByKey.get(reviewKey(company.id, pageUrl));
   const candidates = findDateCandidates(text);
-  const judgement = judgeCandidates({ candidates, previousDeadlineAt: existing?.deadlineAt, now });
+  const judgement = judgeCandidates({
+    candidates,
+    previousDeadlineAt: existing?.deadlineAt,
+    pageText: text,
+    now,
+  });
 
   // 前回から本文がまったく変わっていないなら、その旨を理由に足す（人の確認負荷を下げる）
   const reasons = [...judgement.reasons];

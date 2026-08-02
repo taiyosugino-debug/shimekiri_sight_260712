@@ -34,12 +34,60 @@ const DEADLINE_KEYWORDS = [
   '受付期限',
   '申込期限',
   '申込締切',
-  '応募受付',
-  'まで',
+  // 「応募受付」は「応募受付を開始しました」にも一致してしまい、
+  // 募集開始日を締切と誤認する原因になるため入れない（実測で確認）
 ];
+
+/**
+ * 日付の「後ろ」にあるときだけ締切を意味する語。
+ * 「6/24まで」は締切だが、「（6/24まで） 2026年6月1日」の 6月1日 にとっての
+ * 直前の「まで」は自分のものではない。方向を見ないと隣の日付を巻き込む（実測で確認）。
+ */
+const DEADLINE_SUFFIX_KEYWORDS = ['まで', '必着', '厳守'];
 
 /** 「その日付は確定ではない」ことを示す語 */
 const VAGUE_KEYWORDS = ['予定', '頃', 'ごろ', '未定', '目安', '随時', '見込み', '予定日', 'を予定'];
+
+/**
+ * 「この日付は締切ではない」ことを示す語。
+ * これらの近くにある日付は、開催日・更新日など締切以外の日付である可能性が高い。
+ * 実測で NEC の「開催期間 8/24(月) - 9/4(金)」を締切として拾ってしまった対策。
+ */
+const NOT_DEADLINE_KEYWORDS = [
+  '開催期間',
+  '実施期間',
+  '開催日程',
+  '開催日',
+  '実施日',
+  '開催',
+  '実施',
+  '更新日',
+  '掲載日',
+  '公開日',
+  '投稿日',
+  '発行日',
+  '最終更新',
+];
+
+/**
+ * 「募集はもう終わっている」ことを示す表現。
+ * 見つかった場合、そのページの日付を締切として採用しない。
+ * 実測で NEC の「※応募受付は終了しました」を拾えなかった対策。
+ */
+const CLOSED_PATTERNS: RegExp[] = [
+  /応募\s*(受付)?\s*(は)?\s*終了/,
+  /募集\s*(は)?\s*(終了|締切ました|締め切りました)/,
+  /受付\s*(は)?\s*終了/,
+  /エントリー\s*(受付)?\s*(は)?\s*終了/,
+  /締(め)?切りました/,
+];
+
+/** 締切キーワードが「近い」とみなす文字数 */
+const NEAR_RADIUS = 40;
+/** 除外語がこの距離以内にあり、かつ締切語より近ければ、その日付は締切ではないとみなす */
+const EXCLUDE_RADIUS = 25;
+/** 1位と2位の距離差がこれ以内なら「どちらが本命か特定できない」と判断する */
+const AMBIGUITY_MARGIN = 8;
 
 /** 種別の推測に使う語 */
 const TYPE_HINTS: { type: EntryType; words: string[] }[] = [
@@ -66,10 +114,64 @@ export interface DateCandidate {
   index: number;
   /** 締切キーワードが文脈内にあるか */
   hasDeadlineKeyword: boolean;
+  /**
+   * 最も近い締切キーワードまでの文字数。
+   * 「まもなく締切です！（6/24まで）」の 6/24 は数文字、
+   * 見出しの前にあるニュース掲載日は数十文字離れる。
+   * この差で本命を選ぶのが精度の要。
+   */
+  keywordDistance: number;
+  /** 最も近い締切キーワードの語 */
+  keywordWord?: string;
+  /** 「開催期間」など、締切ではないことを示す語が近くにある場合その語 */
+  excludedBy?: string;
   /** 曖昧語が文脈内にあるか */
   hasVagueKeyword: boolean;
   /** 年の表記があるか（無い場合は年を推測することになる） */
   hasExplicitYear: boolean;
+}
+
+/**
+ * 指定範囲 [start, end) から最も近いキーワードまでの文字数を求める。
+ * 範囲に重なっている場合は 0。見つからなければ Infinity。
+ */
+function nearestKeyword(
+  text: string,
+  start: number,
+  end: number,
+  keywords: string[],
+  /** 'after' なら日付より後ろにあるキーワードだけを対象にする */
+  direction: 'any' | 'after' = 'any',
+): { distance: number; word?: string } {
+  let best = Number.POSITIVE_INFINITY;
+  let bestWord: string | undefined;
+  for (const kw of keywords) {
+    let idx = text.indexOf(kw);
+    while (idx !== -1) {
+      const kEnd = idx + kw.length;
+      if (direction === 'after' && idx < end) {
+        idx = text.indexOf(kw, idx + 1);
+        continue;
+      }
+      const d = idx >= end ? idx - end : kEnd <= start ? start - kEnd : 0;
+      if (d < best) {
+        best = d;
+        bestWord = kw;
+      }
+      idx = text.indexOf(kw, idx + 1);
+    }
+  }
+  return { distance: best, word: bestWord };
+}
+
+/** ページに「募集は終了した」旨の記載があるか */
+export function findClosedMarker(text: string): string | undefined {
+  const t = toHalfWidth(normalizeWhitespace(text));
+  for (const re of CLOSED_PATTERNS) {
+    const m = t.match(re);
+    if (m) return m[0];
+  }
+  return undefined;
 }
 
 /** 連続する空白・改行を1つのスペースにまとめる */
@@ -113,11 +215,22 @@ export function findDateCandidates(text: string): DateCandidate[] {
       const ctxEnd = Math.min(normalized.length, end + CONTEXT_RADIUS);
       const context = normalized.slice(ctxStart, ctxEnd);
 
+      const kwAny = nearestKeyword(normalized, start, end, DEADLINE_KEYWORDS);
+      const kwSuffix = nearestKeyword(normalized, start, end, DEADLINE_SUFFIX_KEYWORDS, 'after');
+      const kw = kwSuffix.distance < kwAny.distance ? kwSuffix : kwAny;
+      const ng = nearestKeyword(normalized, start, end, NOT_DEADLINE_KEYWORDS);
+      // 「開催期間」等が締切語より近くにあるなら、その日付は締切ではないとみなす
+      const excludedBy =
+        ng.distance <= EXCLUDE_RADIUS && ng.distance < kw.distance ? ng.word : undefined;
+
       found.push({
         raw: m[0].trim(),
         context,
         index: start,
-        hasDeadlineKeyword: DEADLINE_KEYWORDS.some((k) => context.includes(k)),
+        hasDeadlineKeyword: kw.distance <= NEAR_RADIUS,
+        keywordDistance: kw.distance,
+        keywordWord: kw.word,
+        excludedBy,
         hasVagueKeyword: VAGUE_KEYWORDS.some((k) => context.includes(k)),
         hasExplicitYear: patternIndex === 0,
       });
@@ -140,6 +253,8 @@ export interface JudgeInput {
   candidates: DateCandidate[];
   /** 前回巡回時に記録していた締切（変化検知用） */
   previousDeadlineAt?: string;
+  /** ページ全体のテキスト（「募集終了」の検知に使う） */
+  pageText?: string;
   now?: Date;
 }
 
@@ -156,39 +271,70 @@ export interface Judgement {
 /**
  * 日付候補群から1つを選び、確信度と要確認理由を決める。
  *
- * 判定ルール（低いほど人の確認が必要）:
- *   低 … 締切が1つも見つからない
- *   低 … 締切キーワード付きの候補が複数あり、どれか特定できない
- *   低 … 「予定」「頃」「未定」など曖昧語が近くにある
- *   低 … 締切が過去、または2年以上先
- *   中 … 年の記載がなく推測した
- *   中 … 前回の取得値から日付が変わった
- *   中 … 締切キーワードが近くに無い（ただの日付を拾った可能性）
+ * 選び方（実測結果を受けて改訂）:
+ *   1. 「開催期間」「更新日」など締切以外を示す語が近い候補は除外する
+ *   2. 残りのうち、締切キーワードに最も近い候補を選ぶ
+ *      （「まもなく締切です！（6/24まで）」の 6/24 は数文字、
+ *        見出し前のニュース掲載日は数十文字離れる。この差で本命が決まる）
+ *   3. 1位と2位が僅差なら「特定できない」として日付を採用しない
+ *   4. 締切キーワードの近くに日付が1つも無ければ、日付を採用しない
+ *      （関係ない日付を締切欄に入れるより、空のほうが安全）
+ *
+ * 確信度:
+ *   低 … 日付が無い / 締切語の近くに無い / 特定できない / 曖昧語 / 過去 / 2年以上先 / 募集終了
+ *   中 … 年を推測した / 前回から変化した
  *   高 … 上記いずれにも当たらない
  */
 export function judgeCandidates(input: JudgeInput): Judgement {
   const now = input.now ?? new Date();
   const reasons: string[] = [];
 
-  if (input.candidates.length === 0) {
-    return {
-      confidence: '低',
-      reasons: ['ページ内に締切らしき日付が1つも見つかりませんでした。ページの作りが特殊か、締切が画像・PDF・ログイン後にある可能性があります'],
-    };
+  const closed = input.pageText ? findClosedMarker(input.pageText) : undefined;
+  if (closed) {
+    reasons.push(`ページに「${closed}」という記載があります。募集が終わっている可能性があります`);
   }
 
-  // 締切キーワード付きの候補を優先。無ければ全候補から選ぶ
-  const keyworded = input.candidates.filter((c) => c.hasDeadlineKeyword);
-  const pool = keyworded.length > 0 ? keyworded : input.candidates;
-  const chosen = pool[0];
+  if (input.candidates.length === 0) {
+    reasons.push(
+      'ページ内に日付が1つも見つかりませんでした。ページの作りが特殊か、締切が画像・PDF・ログイン後にある可能性があります',
+    );
+    return { confidence: '低', reasons };
+  }
+
+  // 1. 締切以外を示す語が近い候補を除外
+  const excluded = input.candidates.filter((c) => c.excludedBy);
+  const usable = input.candidates.filter((c) => !c.excludedBy);
+
+  // 2. 締切キーワードが近い候補だけを、距離が近い順に並べる
+  const keyworded = usable
+    .filter((c) => c.hasDeadlineKeyword)
+    .sort((a, b) => a.keywordDistance - b.keywordDistance);
 
   if (keyworded.length === 0) {
-    reasons.push('「締切」「応募期限」などの語が近くに無い日付です。締切ではない日付（更新日・開催日など）を拾っている可能性があります');
+    const excludedNote =
+      excluded.length > 0
+        ? `（「${excluded[0].excludedBy}」の近くにある日付が${excluded.length}件ありましたが、締切ではないため除外しました）`
+        : '';
+    reasons.push(
+      `日付は${input.candidates.length}件見つかりましたが、いずれも「締切」「応募期限」などの語の近くにありません${excludedNote}。` +
+        '締切がページに書かれていない可能性が高いです',
+    );
+    return { confidence: '低', reasons };
   }
 
-  if (keyworded.length > 1) {
-    const others = keyworded.slice(1, 4).map((c) => c.raw).join('、');
-    reasons.push(`締切らしき日付が${keyworded.length}件見つかり、どれが本命か特定できませんでした（他の候補: ${others}）`);
+  const chosen = keyworded[0];
+  const runnerUp = keyworded[1];
+
+  // 3. 1位と2位が僅差なら特定できない
+  if (runnerUp && runnerUp.keywordDistance - chosen.keywordDistance <= AMBIGUITY_MARGIN) {
+    const others = keyworded
+      .slice(1, 4)
+      .map((c) => c.raw)
+      .join('、');
+    reasons.push(
+      `締切らしき日付が${keyworded.length}件あり、どれが本命か特定できませんでした（候補: ${chosen.raw}、${others}）`,
+    );
+    return { confidence: '低', reasons, chosen };
   }
 
   if (chosen.hasVagueKeyword) {
@@ -201,7 +347,6 @@ export function judgeCandidates(input: JudgeInput): Judgement {
   }
 
   const deadlineAt = parseDeadlineText(chosen.raw, { now }) ?? undefined;
-
   if (!deadlineAt) {
     reasons.push(`「${chosen.raw}」を日付として解釈できませんでした`);
     return { confidence: '低', reasons, chosen };
@@ -218,33 +363,11 @@ export function judgeCandidates(input: JudgeInput): Judgement {
     reasons.push(`前回の巡回時（${input.previousDeadlineAt.slice(0, 10)}）から締切が変わりました`);
   }
 
-  const confidence = decideConfidence({
-    reasons,
-    hasKeyword: keyworded.length > 0,
-    multipleKeyworded: keyworded.length > 1,
-    vague: chosen.hasVagueKeyword,
-    expired: remain < 0,
-    tooFar: remain > 730,
-  });
+  let confidence: Confidence = '高';
+  if (closed || chosen.hasVagueKeyword || remain < 0 || remain > 730) confidence = '低';
+  else if (reasons.length > 0) confidence = '中';
 
   return { confidence, reasons, chosen, deadlineAt };
-}
-
-interface ConfidenceFactors {
-  reasons: string[];
-  hasKeyword: boolean;
-  multipleKeyworded: boolean;
-  vague: boolean;
-  expired: boolean;
-  tooFar: boolean;
-}
-
-function decideConfidence(f: ConfidenceFactors): Confidence {
-  // 「低」に落とす条件: 特定できない / 曖昧語 / 日付として明らかにおかしい
-  if (f.multipleKeyworded || f.vague || f.expired || f.tooFar || !f.hasKeyword) return '低';
-  // 理由が1つでも残っていれば「中」（年の推測・前回からの変化など）
-  if (f.reasons.length > 0) return '中';
-  return '高';
 }
 
 /** ページ本文から人が読める短い見出しを作る（review タブの title 列用） */
