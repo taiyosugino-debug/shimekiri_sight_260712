@@ -1,20 +1,20 @@
 // =============================================================
-// フィルタバー — 種別/卒年/企業規模/業界/残り日数/難易度をselectで、
+// フィルタバー — 種別/卒年/業界/採用難易度Tier/残り日数をselectで、
 // フリーワード検索・ソート・締切済み表示・条件クリアを提供する
 // =============================================================
 
 'use client';
 
-import { COMPANY_SIZES, ENTRY_TYPES, GRAD_YEARS, INDUSTRIES } from '@/lib/types';
+import { ENTRY_TYPES, GRAD_YEARS, TIERS } from '@/lib/types';
+import { INDUSTRY_GROUPS } from '@/lib/industry';
 import { SortKey } from '@/lib/filters';
 
 export interface FilterState {
   type: string;
   gradYear: string;
-  size: string;
   industry: string;
+  tierAtLeast: string;
   daysWithin: string;
-  difficultyMin: string;
   q: string;
   includeExpired: boolean;
   sort: SortKey;
@@ -23,10 +23,9 @@ export interface FilterState {
 export const INITIAL_FILTER_STATE: FilterState = {
   type: '',
   gradYear: '',
-  size: '',
   industry: '',
+  tierAtLeast: '',
   daysWithin: '',
-  difficultyMin: '',
   q: '',
   includeExpired: false,
   sort: 'deadline_asc',
@@ -39,7 +38,7 @@ interface FilterBarProps {
 }
 
 const DAYS_WITHIN_OPTIONS = [3, 7, 14, 30];
-const DIFFICULTY_OPTIONS = [2, 3, 4, 5];
+
 
 export default function FilterBar({ value, onChange, onClear }: FilterBarProps) {
   const set = <K extends keyof FilterState>(key: K, v: FilterState[K]) => {
@@ -103,26 +102,7 @@ export default function FilterBar({ value, onChange, onClear }: FilterBarProps) 
           </select>
         </div>
 
-        <div className="w-36 shrink-0">
-          <label className="label" htmlFor="filter-size">
-            企業規模
-          </label>
-          <select
-            id="filter-size"
-            className="input"
-            value={value.size}
-            onChange={(e) => set('size', e.target.value)}
-          >
-            <option value="">すべて</option>
-            {COMPANY_SIZES.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="w-32 shrink-0">
+        <div className="w-52 shrink-0">
           <label className="label" htmlFor="filter-industry">
             業界
           </label>
@@ -133,7 +113,7 @@ export default function FilterBar({ value, onChange, onClear }: FilterBarProps) 
             onChange={(e) => set('industry', e.target.value)}
           >
             <option value="">すべて</option>
-            {INDUSTRIES.map((i) => (
+            {INDUSTRY_GROUPS.map((i) => (
               <option key={i} value={i}>
                 {i}
               </option>
@@ -160,20 +140,20 @@ export default function FilterBar({ value, onChange, onClear }: FilterBarProps) 
           </select>
         </div>
 
-        <div className="w-32 shrink-0">
-          <label className="label" htmlFor="filter-difficultyMin">
-            難易度
+        <div className="w-40 shrink-0">
+          <label className="label" htmlFor="filter-tierAtLeast">
+            採用難易度
           </label>
           <select
-            id="filter-difficultyMin"
+            id="filter-tierAtLeast"
             className="input"
-            value={value.difficultyMin}
-            onChange={(e) => set('difficultyMin', e.target.value)}
+            value={value.tierAtLeast}
+            onChange={(e) => set('tierAtLeast', e.target.value)}
           >
             <option value="">指定なし</option>
-            {DIFFICULTY_OPTIONS.map((d) => (
-              <option key={d} value={d}>
-                ★{d}以上
+            {TIERS.map((t) => (
+              <option key={t} value={t}>
+                {t}以上
               </option>
             ))}
           </select>
@@ -195,6 +175,7 @@ export default function FilterBar({ value, onChange, onClear }: FilterBarProps) 
             <option value="deadline_asc">締切が近い順</option>
             <option value="deadline_desc">締切が遠い順</option>
             <option value="newest">新着順</option>
+            <option value="tier_desc">難関順（SS+から）</option>
           </select>
         </div>
 

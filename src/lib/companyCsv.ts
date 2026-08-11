@@ -1,7 +1,7 @@
 // =============================================================
 // 企業マスターの CSV 一括登録・更新
 //
-// 500社ぶんの採用ページURLを人が用意し、あとから差し替えられるようにするための機能。
+// 616社ぶんの企業マスターを人が用意し、あとから差し替えられるようにするための機能。
 // 企業名で照合し、既にあれば更新・無ければ新規作成する（upsert）。
 //
 // 空欄の扱い（重要）:
@@ -16,9 +16,10 @@ import {
   CompanyInput,
   ImportResult,
   ImportRowResult,
-  isCompanySize,
   isIndustry,
+  isTier,
   Store,
+  Tier,
 } from './types';
 
 /** 必須列。これが無ければ取り込みを始めない */
@@ -28,11 +29,31 @@ const REQUIRED_HEADER = ['company_name'];
 export const COMPANY_CSV_HEADER = [
   'company_name',
   'industry',
-  'size',
+  'tier',
+  'difficulty_score',
+  'hiring_count',
+  'est_entries',
+  'est_ratio',
   'hp_url',
   'recruit_url',
   'note',
 ] as const;
+
+/** tier 以外の数値列。列名 -> CompanyInput のキー */
+const NUMERIC_COLUMNS = [
+  ['difficulty_score', 'difficultyScore', '入社難易度'],
+  ['hiring_count', 'hiringCount', '採用人数'],
+  ['est_entries', 'estEntries', '推定エントリー数'],
+  ['est_ratio', 'estRatio', '推定内定倍率'],
+] as const;
+
+function parseNumericCell(raw: string | undefined, label: string): number | undefined {
+  const v = (raw ?? '').trim();
+  if (!v || v === CLEAR_TOKEN) return undefined;
+  const n = Number(v);
+  if (!Number.isFinite(n)) throw new Error(`${label} が数値ではありません（${v}）`);
+  return n;
+}
 
 /** 値を明示的に空にしたいときに入れる記号 */
 const CLEAR_TOKEN = '-';
@@ -100,6 +121,8 @@ export async function importCompanyCsv(
   for (const c of existing) byName.set(c.name.trim(), c);
 
   const seenNames = new Set<string>();
+  /** 新規作成分。最後に一括で書き込む */
+  const pendingCreates: CompanyInput[] = [];
 
   for (let i = 1; i < table.length; i++) {
     const line = i + 1;
@@ -126,25 +149,28 @@ export async function importCompanyCsv(
       const current = byName.get(name);
 
       if (!current) {
-        // --- 新規作成: industry と size は必須 ---
+        // --- 新規作成: industry と tier は必須 ---
         if (!isIndustry(obj.industry)) {
-          throw new Error(`新規登録には正しい industry が必要です（${obj.industry || '空'}）`);
+          throw new Error(`新規登録には industry が必要です（${obj.industry || '空'}）`);
         }
-        if (!isCompanySize(obj.size)) {
-          throw new Error(`新規登録には正しい size が必要です（${obj.size || '空'}）`);
+        if (!isTier(obj.tier)) {
+          throw new Error(`新規登録には正しい tier が必要です（${obj.tier || '空'}）`);
         }
         const input: CompanyInput = {
           name,
           industry: obj.industry,
-          size: obj.size,
+          tier: obj.tier,
+          difficultyScore: parseNumericCell(obj.difficulty_score, '入社難易度'),
+          hiringCount: parseNumericCell(obj.hiring_count, '採用人数'),
+          estEntries: parseNumericCell(obj.est_entries, '推定エントリー数'),
+          estRatio: parseNumericCell(obj.est_ratio, '推定内定倍率'),
           hpUrl: cellValue(obj.hp_url),
           recruitUrl: cellValue(obj.recruit_url),
           note: cellValue(obj.note),
         };
-        if (mode === 'commit') {
-          const c = await store.createCompany(input);
-          byName.set(name, c);
-        }
+        // 616社の一括投入では新規が数百件になる。1件ずつ書くと実行時間・APIコール数が
+        // 跳ね上がるため、ここでは溜めておいて最後に createCompaniesBulk でまとめて書く。
+        if (mode === 'commit') pendingCreates.push(input);
         created += 1;
         rows.push({ line, action: 'create', message: `新規登録: ${name}` });
         continue;
@@ -161,11 +187,19 @@ export async function importCompanyCsv(
           changes.push(`業界 ${current.industry}→${obj.industry}`);
         }
       }
-      if (obj.size) {
-        if (!isCompanySize(obj.size)) throw new Error(`size が不正です（${obj.size}）`);
-        if (obj.size !== current.size) {
-          patch.size = obj.size;
-          changes.push(`規模 ${current.size}→${obj.size}`);
+      if (obj.tier) {
+        if (!isTier(obj.tier)) throw new Error(`tier が不正です（${obj.tier}）`);
+        if (obj.tier !== current.tier) {
+          patch.tier = obj.tier as Tier;
+          changes.push(`Tier ${current.tier ?? '未設定'}→${obj.tier}`);
+        }
+      }
+      for (const [col, key, label] of NUMERIC_COLUMNS) {
+        if (!obj[col]) continue;
+        const next = parseNumericCell(obj[col], label);
+        if (next !== current[key]) {
+          patch[key] = next;
+          changes.push(`${label} ${current[key] ?? '未設定'}→${next ?? '削除'}`);
         }
       }
       applyTextPatch(patch, changes, 'hpUrl', 'HP URL', obj.hp_url, current.hpUrl);
@@ -186,6 +220,10 @@ export async function importCompanyCsv(
       const message = err instanceof Error ? err.message : String(err);
       rows.push({ line, action: 'error', message: `${name || '(企業名なし)'}: ${message}` });
     }
+  }
+
+  if (mode === 'commit' && pendingCreates.length > 0) {
+    await store.createCompaniesBulk(pendingCreates);
   }
 
   return { ok: errors === 0, created, updated, unchanged, errors, rows };

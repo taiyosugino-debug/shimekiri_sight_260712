@@ -7,7 +7,7 @@
 
 import { useMemo, useState } from 'react';
 import { applyFilters, FilterParams } from '@/lib/filters';
-import { EntryWithCompany, isCompanySize, isEntryType, isIndustry } from '@/lib/types';
+import { EntryWithCompany, isEntryType, isIndustry, isTier } from '@/lib/types';
 import { isExpired } from '@/lib/date';
 import FilterBar, { FilterState, INITIAL_FILTER_STATE } from './FilterBar';
 import EntryCard from './EntryCard';
@@ -33,15 +33,11 @@ function toFilterParams(state: FilterState): FilterParams {
     const gy = Number(state.gradYear);
     if (Number.isInteger(gy)) params.gradYear = gy;
   }
-  if (isCompanySize(state.size)) params.size = state.size;
   if (isIndustry(state.industry)) params.industry = state.industry;
+  if (isTier(state.tierAtLeast)) params.tierAtLeast = state.tierAtLeast;
   if (state.daysWithin) {
     const dw = Number(state.daysWithin);
     if (Number.isInteger(dw) && dw > 0) params.daysWithin = dw;
-  }
-  if (state.difficultyMin) {
-    const dm = Number(state.difficultyMin);
-    if (Number.isInteger(dm) && dm >= 1 && dm <= 5) params.difficultyMin = dm;
   }
   if (state.q.trim()) params.q = state.q.trim();
   if (state.includeExpired) params.includeExpired = true;

@@ -46,7 +46,6 @@ export function guessGradYear(deadlineIso: string): number {
 
 export interface PromoteOptions {
   /** 取り込む Entry の初期難易度 */
-  defaultDifficulty?: number;
 }
 
 /**
@@ -58,7 +57,6 @@ export async function promoteApprovedReviewItems(
   opts: PromoteOptions = {},
 ): Promise<PromoteResult> {
   const result: PromoteResult = { approved: 0, imported: 0, skipped: [], errors: [], entryIds: [] };
-  const difficulty = opts.defaultDifficulty ?? 3;
 
   let items: ReviewItem[];
   try {
@@ -96,7 +94,6 @@ export async function promoteApprovedReviewItems(
         type: (item.type ?? '本選考') as EntryType,
         gradYear: guessGradYear(item.deadlineAt),
         deadlineAt: item.deadlineAt,
-        difficulty,
         sourceUrl: item.pageUrl,
         applyUrl: item.pageUrl,
         // 承認済みでも必ず draft。公開は管理画面で人が最終判断する

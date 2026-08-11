@@ -96,21 +96,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     patch.deadlineAt = deadlineAt;
   }
 
-  if ('difficulty' in b) {
-    const difficulty = b.difficulty;
-    if (typeof difficulty !== 'number' || difficulty < 1 || difficulty > 5) {
-      return NextResponse.json({ error: '難易度は1〜5で指定してください' }, { status: 400 });
-    }
-    patch.difficulty = difficulty;
-  }
-
-  if ('applyUrl' in b) {
-    const applyUrl = b.applyUrl;
-    if (applyUrl !== undefined && applyUrl !== null && typeof applyUrl !== 'string') {
-      return NextResponse.json({ error: 'エントリーURLが不正です' }, { status: 400 });
-    }
-    patch.applyUrl = typeof applyUrl === 'string' && applyUrl.trim() ? applyUrl.trim() : undefined;
-  }
 
   if ('description' in b) {
     const description = b.description;

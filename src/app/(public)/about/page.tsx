@@ -80,10 +80,9 @@ export default function AboutPage() {
           <p className="mt-2 text-xs leading-relaxed text-slate-500">
             <code className="rounded bg-white px-1 py-0.5">gradYear</code>（卒年）・
             <code className="rounded bg-white px-1 py-0.5">type</code>（種別）・
-            <code className="rounded bg-white px-1 py-0.5">size</code>（企業規模）・
             <code className="rounded bg-white px-1 py-0.5">industry</code>（業界）・
             <code className="rounded bg-white px-1 py-0.5">daysWithin</code>（残り日数）・
-            <code className="rounded bg-white px-1 py-0.5">difficultyMin</code>（難易度）・
+            <code className="rounded bg-white px-1 py-0.5">tierAtLeast</code>（採用難易度Tier以上）・
             <code className="rounded bg-white px-1 py-0.5">q</code>（フリーワード）を
             組み合わせて自分専用のカレンダーURLを作れます。
           </p>

@@ -3,7 +3,8 @@
 import Link from 'next/link';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Company, CompanySize, COMPANY_SIZES, Industry, INDUSTRIES } from '@/lib/types';
+import { Company, compareTier, Industry, Tier, TIERS } from '@/lib/types';
+import { availableIndustryGroups, industryGroupOf } from '@/lib/industry';
 import { adminFetch, errorMessage } from '@/components/admin/adminApi';
 import CompanyRow from '@/components/admin/CompanyRow';
 import { ErrorBanner, LoadingBlock, EmptyBlock } from '@/components/admin/Feedback';
@@ -18,8 +19,8 @@ export default function AdminCompaniesPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [name, setName] = useState('');
-  const [industry, setIndustry] = useState<Industry>(INDUSTRIES[0]);
-  const [size, setSize] = useState<CompanySize>(COMPANY_SIZES[0]);
+  const [industry, setIndustry] = useState<Industry>('');
+  const [tier, setTier] = useState<Tier | ''>('');
   const [hpUrl, setHpUrl] = useState('');
   const [recruitUrl, setRecruitUrl] = useState('');
   const [creating, setCreating] = useState(false);
@@ -42,10 +43,31 @@ export default function AdminCompaniesPage() {
     load();
   }, [load]);
 
-  const sorted = useMemo(
-    () => [...(companies ?? [])].sort((a, b) => a.name.localeCompare(b.name, 'ja')),
+  // 616社を一覧するため、絞り込みと並び替えを用意する
+  const [q, setQ] = useState('');
+  const [filterTier, setFilterTier] = useState<string>('');
+  const [filterIndustry, setFilterIndustry] = useState<string>('');
+  const [sortKey, setSortKey] = useState<'name' | 'tier'>('tier');
+
+  const industryOptions = useMemo(
+    () => availableIndustryGroups((companies ?? []).map((c) => c.industry)),
     [companies],
   );
+
+  const sorted = useMemo(() => {
+    const kw = q.trim().toLowerCase();
+    const list = (companies ?? []).filter((c) => {
+      if (filterTier && c.tier !== filterTier) return false;
+      if (filterIndustry && industryGroupOf(c.industry) !== filterIndustry) return false;
+      if (kw && !`${c.name} ${c.industry}`.toLowerCase().includes(kw)) return false;
+      return true;
+    });
+    return list.sort((a, b) =>
+      sortKey === 'tier'
+        ? compareTier(a.tier, b.tier) || a.name.localeCompare(b.name, 'ja')
+        : a.name.localeCompare(b.name, 'ja'),
+    );
+  }, [companies, q, filterTier, filterIndustry, sortKey]);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -61,7 +83,7 @@ export default function AdminCompaniesPage() {
         body: {
           name: name.trim(),
           industry,
-          size,
+          ...(tier ? { tier } : {}),
           hpUrl: hpUrl.trim() || undefined,
           recruitUrl: recruitUrl.trim() || undefined,
         },
@@ -98,25 +120,21 @@ export default function AdminCompaniesPage() {
             <label htmlFor="newIndustry" className="label">
               業界
             </label>
-            <select
+            <input
               id="newIndustry"
               className="input"
               value={industry}
               onChange={(e) => setIndustry(e.target.value as Industry)}
-            >
-              {INDUSTRIES.map((v) => (
-                <option key={v} value={v}>
-                  {v}
-                </option>
-              ))}
-            </select>
+              placeholder="616社シートの業界（例: 外資コンサル）"
+            />
           </div>
           <div>
-            <label htmlFor="newSize" className="label">
-              企業規模
+            <label htmlFor="newTier" className="label">
+              採用難易度Tier
             </label>
-            <select id="newSize" className="input" value={size} onChange={(e) => setSize(e.target.value as CompanySize)}>
-              {COMPANY_SIZES.map((v) => (
+            <select id="newTier" className="input" value={tier} onChange={(e) => setTier(e.target.value as Tier | '')}>
+              <option value="">未設定</option>
+              {TIERS.map((v) => (
                 <option key={v} value={v}>
                   {v}
                 </option>
@@ -154,6 +172,42 @@ export default function AdminCompaniesPage() {
 
       <ErrorBanner message={error} />
 
+      {/* 616社を扱うための絞り込み */}
+      <div className="card mb-3 flex flex-wrap items-end gap-2 p-3">
+        <div className="min-w-[200px] flex-1">
+          <label className="label" htmlFor="companyQ">企業名・業界で検索</label>
+          <input id="companyQ" className="input" value={q} onChange={(e) => setQ(e.target.value)} />
+        </div>
+        <div className="w-40">
+          <label className="label" htmlFor="companyTier">Tier</label>
+          <select id="companyTier" className="input" value={filterTier} onChange={(e) => setFilterTier(e.target.value)}>
+            <option value="">すべて</option>
+            {TIERS.map((t) => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
+        </div>
+        <div className="w-56">
+          <label className="label" htmlFor="companyIndustry">業界</label>
+          <select id="companyIndustry" className="input" value={filterIndustry} onChange={(e) => setFilterIndustry(e.target.value)}>
+            <option value="">すべて</option>
+            {industryOptions.map((i) => (
+              <option key={i} value={i}>{i}</option>
+            ))}
+          </select>
+        </div>
+        <div className="w-40">
+          <label className="label" htmlFor="companySort">並び替え</label>
+          <select id="companySort" className="input" value={sortKey} onChange={(e) => setSortKey(e.target.value as 'name' | 'tier')}>
+            <option value="tier">難関順</option>
+            <option value="name">企業名順</option>
+          </select>
+        </div>
+        <p className="ml-auto text-sm text-slate-500">
+          {sorted.length}社 / 全{(companies ?? []).length}社
+        </p>
+      </div>
+
       {loading && companies === null ? (
         <LoadingBlock />
       ) : sorted.length === 0 ? (
@@ -165,7 +219,7 @@ export default function AdminCompaniesPage() {
               <tr>
                 <th className="px-3 py-2 text-left font-medium">企業名</th>
                 <th className="px-3 py-2 text-left font-medium">業界</th>
-                <th className="px-3 py-2 text-left font-medium">規模</th>
+                <th className="px-3 py-2 text-left font-medium">採用難易度</th>
                 <th className="px-3 py-2 text-left font-medium">HP</th>
                 <th className="px-3 py-2 text-right font-medium">操作</th>
               </tr>

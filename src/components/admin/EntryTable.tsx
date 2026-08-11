@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { difficultyStars, EntryWithCompany } from '@/lib/types';
+import { EntryWithCompany } from '@/lib/types';
+import { TierBadge } from '@/components/TierBadge';
 import { formatDeadline, isExpired } from '@/lib/date';
 import { adminFetch, errorMessage } from './adminApi';
 import { StatusBadge } from './StatusBadge';
@@ -93,7 +94,7 @@ export default function EntryTable({ entries, onChanged }: Props) {
                   <div className="mt-0.5 text-xs text-slate-500">
                     {entry.type}・{entry.gradYear}卒・{formatDeadline(entry.deadlineAt)}
                   </div>
-                  <div className="mt-1 text-xs text-amber-500">{difficultyStars(entry.difficulty)}</div>
+                  <div className="mt-1"><TierBadge tier={entry.company.tier} /></div>
                 </div>
                 <StatusBadge status={entry.status} />
               </div>
@@ -140,7 +141,7 @@ export default function EntryTable({ entries, onChanged }: Props) {
               <th className="px-3 py-2 text-left font-medium">企業・タイトル</th>
               <th className="px-3 py-2 text-left font-medium">種別</th>
               <th className="px-3 py-2 text-left font-medium">卒年</th>
-              <th className="px-3 py-2 text-left font-medium">難易度</th>
+              <th className="px-3 py-2 text-left font-medium">採用難易度</th>
               <th className="px-3 py-2 text-left font-medium">ステータス</th>
               <th className="px-3 py-2 text-left font-medium">注目</th>
               <th className="px-3 py-2 text-right font-medium">操作</th>
@@ -160,8 +161,8 @@ export default function EntryTable({ entries, onChanged }: Props) {
                   </td>
                   <td className="whitespace-nowrap px-3 py-2 text-slate-700">{entry.type}</td>
                   <td className="whitespace-nowrap px-3 py-2 text-slate-700">{entry.gradYear}</td>
-                  <td className="whitespace-nowrap px-3 py-2 text-amber-500">
-                    {difficultyStars(entry.difficulty)}
+                  <td className="whitespace-nowrap px-3 py-2">
+                    <TierBadge tier={entry.company.tier} />
                   </td>
                   <td className="whitespace-nowrap px-3 py-2">
                     <StatusBadge status={entry.status} />

@@ -11,7 +11,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { adminFetch, errorMessage } from '@/components/admin/adminApi';
 import { ErrorBanner } from '@/components/admin/Feedback';
-import { ImportRowResult, COMPANY_SIZES, INDUSTRIES } from '@/lib/types';
+import { ImportRowResult, TIERS } from '@/lib/types';
 
 interface Result {
   ok: boolean;
@@ -22,9 +22,9 @@ interface Result {
   rows: ImportRowResult[];
 }
 
-const SAMPLE = `company_name,industry,size,hp_url,recruit_url,note
-マツダ,メーカー,大手,https://www.mazda.com/ja/,https://www.mazda.com/ja/careers/newgraduate-1/,
-サイバーエージェント,IT,メガベンチャー,https://www.cyberagent.co.jp/,https://www.cyberagent.co.jp/careers/,`;
+const SAMPLE = `company_name,industry,tier,difficulty_score,hiring_count,est_entries,est_ratio,hp_url,recruit_url,note
+マツダ,自動車,B+,57.3,,,,https://www.mazda.com/ja/,https://www.mazda.com/ja/careers/newgraduate-1/,
+サイバーエージェント,広告,A+,59.6,,,,https://www.cyberagent.co.jp/,https://www.cyberagent.co.jp/careers/,`;
 
 export default function CompanyImportPage() {
   const [csv, setCsv] = useState('');
@@ -68,7 +68,7 @@ export default function CompanyImportPage() {
         <p className="font-medium text-slate-800">書き方</p>
         <ul className="list-disc space-y-1 pl-5">
           <li>
-            1行目は見出し行：<code className="rounded bg-slate-100 px-1">company_name,industry,size,hp_url,recruit_url,note</code>
+            1行目は見出し行：<code className="rounded bg-slate-100 px-1">company_name,industry,tier,difficulty_score,hiring_count,est_entries,est_ratio,hp_url,recruit_url,note</code>
           </li>
           <li>
             <strong>company_name だけが必須</strong>です。既に登録済みの企業名と一致すれば更新、無ければ新規登録します
@@ -79,9 +79,12 @@ export default function CompanyImportPage() {
           <li>
             値を消したいときは <code className="rounded bg-slate-100 px-1">-</code>（ハイフン1文字）を入れてください
           </li>
-          <li>新規登録する企業は industry と size が必要です</li>
-          <li>industry: {INDUSTRIES.join(' / ')}</li>
-          <li>size: {COMPANY_SIZES.join(' / ')}</li>
+          <li>新規登録する企業は industry と tier が必要です</li>
+          <li>
+            industry は「採用難易度Tier_エントリー数推定_616社」シートの業界をそのまま入れてください（例: 外資コンサル / 電機精密）
+          </li>
+          <li>tier: {TIERS.join(' / ')}</li>
+          <li>difficulty_score・hiring_count・est_entries・est_ratio は数値。空欄なら変更しません</li>
         </ul>
         <details className="pt-1">
           <summary className="cursor-pointer text-brand-600">記入例を見る</summary>

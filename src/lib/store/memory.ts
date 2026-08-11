@@ -51,7 +51,11 @@ export class MemoryStore implements Store {
       id: input.id || genId('co'),
       name: input.name,
       industry: input.industry,
-      size: input.size,
+      tier: input.tier,
+      difficultyScore: input.difficultyScore,
+      hiringCount: input.hiringCount,
+      estEntries: input.estEntries,
+      estRatio: input.estRatio,
       hpUrl: input.hpUrl,
       recruitUrl: input.recruitUrl,
       note: input.note,
@@ -60,6 +64,12 @@ export class MemoryStore implements Store {
     };
     companies.push(company);
     return company;
+  }
+
+  async createCompaniesBulk(inputs: (CompanyInput & { id?: string })[]): Promise<Company[]> {
+    const out: Company[] = [];
+    for (const input of inputs) out.push(await this.createCompany(input));
+    return out;
   }
 
   async updateCompany(id: string, patch: Partial<CompanyInput>): Promise<Company | null> {
@@ -99,7 +109,6 @@ export class MemoryStore implements Store {
       type: input.type,
       gradYear: input.gradYear,
       deadlineAt: input.deadlineAt,
-      difficulty: input.difficulty,
       applyUrl: input.applyUrl,
       description: input.description,
       sourceUrl: input.sourceUrl,

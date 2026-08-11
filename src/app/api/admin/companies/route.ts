@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getStore } from '@/lib/store';
 import { requireAdmin } from '@/lib/auth';
-import { isCompanySize, isIndustry } from '@/lib/types';
+import { isIndustry, isTier } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -35,7 +35,7 @@ export async function POST(request: Request) {
 
   const name = b.name;
   const industry = b.industry;
-  const size = b.size;
+  const tier = b.tier;
 
   if (typeof name !== 'string' || name.trim().length === 0) {
     return NextResponse.json({ error: '企業名を入力してください' }, { status: 400 });
@@ -43,8 +43,8 @@ export async function POST(request: Request) {
   if (!isIndustry(industry)) {
     return NextResponse.json({ error: '業界が不正です' }, { status: 400 });
   }
-  if (!isCompanySize(size)) {
-    return NextResponse.json({ error: '企業規模が不正です' }, { status: 400 });
+  if (tier !== undefined && tier !== null && !isTier(tier)) {
+    return NextResponse.json({ error: '採用難易度Tierが不正です' }, { status: 400 });
   }
 
   const hpUrl = b.hpUrl;
@@ -64,7 +64,7 @@ export async function POST(request: Request) {
   const company = await store.createCompany({
     name: name.trim(),
     industry,
-    size,
+    tier: isTier(tier) ? tier : undefined,
     hpUrl: typeof hpUrl === 'string' && hpUrl.trim() ? hpUrl.trim() : undefined,
     recruitUrl: typeof recruitUrl === 'string' && recruitUrl.trim() ? recruitUrl.trim() : undefined,
     note: typeof note === 'string' && note.trim() ? note.trim() : undefined,

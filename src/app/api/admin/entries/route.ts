@@ -54,7 +54,6 @@ export async function POST(request: Request) {
   const type = b.type;
   const gradYear = b.gradYear;
   const deadlineAt = b.deadlineAt;
-  const difficulty = b.difficulty;
 
   if (typeof companyId !== 'string' || companyId.length === 0) {
     return NextResponse.json({ error: '企業を選択してください' }, { status: 400 });
@@ -70,9 +69,6 @@ export async function POST(request: Request) {
   }
   if (typeof deadlineAt !== 'string' || Number.isNaN(new Date(deadlineAt).getTime())) {
     return NextResponse.json({ error: '締切日時が不正です' }, { status: 400 });
-  }
-  if (typeof difficulty !== 'number' || difficulty < 1 || difficulty > 5) {
-    return NextResponse.json({ error: '難易度は1〜5で指定してください' }, { status: 400 });
   }
 
   const store = getStore();
@@ -92,7 +88,6 @@ export async function POST(request: Request) {
     type,
     gradYear,
     deadlineAt,
-    difficulty,
     applyUrl: typeof b.applyUrl === 'string' && b.applyUrl.trim() ? b.applyUrl.trim() : undefined,
     description: typeof b.description === 'string' && b.description.trim() ? b.description.trim() : undefined,
     sourceUrl: typeof b.sourceUrl === 'string' && b.sourceUrl.trim() ? b.sourceUrl.trim() : undefined,

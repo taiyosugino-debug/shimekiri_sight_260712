@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getStore } from '@/lib/store';
 import { requireAdmin } from '@/lib/auth';
-import { CompanyInput, isCompanySize, isIndustry } from '@/lib/types';
+import { CompanyInput, isIndustry, isTier } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -47,12 +47,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     patch.industry = industry;
   }
 
-  if ('size' in b) {
-    const size = b.size;
-    if (!isCompanySize(size)) {
-      return NextResponse.json({ error: '企業規模が不正です' }, { status: 400 });
+  if ('tier' in b) {
+    const tier = b.tier;
+    if (!isTier(tier)) {
+      return NextResponse.json({ error: '採用難易度Tierが不正です' }, { status: 400 });
     }
-    patch.size = size;
+    patch.tier = tier;
   }
 
   if ('hpUrl' in b) {

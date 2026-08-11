@@ -4,8 +4,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Company,
-  CompanySize,
-  COMPANY_SIZES,
   Entry,
   EntryStatus,
   ENTRY_STATUSES,
@@ -14,14 +12,14 @@ import {
   ENTRY_TYPES,
   GRAD_YEARS,
   Industry,
-  INDUSTRIES,
+  Tier,
+  TIERS,
 } from '@/lib/types';
 import { jstParts, toIsoJst } from '@/lib/date';
 import { adminFetch, errorMessage } from './adminApi';
 import { ErrorBanner } from './Feedback';
 
 const NEW_COMPANY_VALUE = '__new__';
-const DIFFICULTY_OPTIONS = [1, 2, 3, 4, 5];
 
 interface CompaniesResponse {
   companies: Company[];
@@ -42,7 +40,6 @@ interface FormState {
   gradYear: number;
   date: string; // 'YYYY-MM-DD'
   time: string; // 'HH:mm'
-  difficulty: number;
   applyUrl: string;
   sourceUrl: string;
   selectionFlow: string;
@@ -67,7 +64,6 @@ function initialFormState(): FormState {
     gradYear: GRAD_YEARS[GRAD_YEARS.length > 1 ? 1 : 0],
     date: todayYmd(),
     time: '23:59',
-    difficulty: 3,
     applyUrl: '',
     sourceUrl: '',
     selectionFlow: '',
@@ -100,8 +96,8 @@ export default function EntryForm({ entryId }: Props) {
 
   // 新規企業インライン追加用
   const [newCompanyName, setNewCompanyName] = useState('');
-  const [newCompanyIndustry, setNewCompanyIndustry] = useState<Industry>(INDUSTRIES[0]);
-  const [newCompanySize, setNewCompanySize] = useState<CompanySize>(COMPANY_SIZES[0]);
+  const [newCompanyIndustry, setNewCompanyIndustry] = useState<Industry>('');
+  const [newCompanyTier, setNewCompanyTier] = useState<Tier | ''>('');
 
   useEffect(() => {
     let cancelled = false;
@@ -126,7 +122,6 @@ export default function EntryForm({ entryId }: Props) {
             gradYear: e.gradYear,
             date,
             time,
-            difficulty: e.difficulty,
             applyUrl: e.applyUrl ?? '',
             sourceUrl: e.sourceUrl ?? '',
             selectionFlow: e.selectionFlow ?? '',
@@ -193,7 +188,7 @@ export default function EntryForm({ entryId }: Props) {
           body: {
             name: newCompanyName.trim(),
             industry: newCompanyIndustry,
-            size: newCompanySize,
+            ...(newCompanyTier ? { tier: newCompanyTier } : {}),
           },
         });
         companyId = created.company.id;
@@ -209,7 +204,6 @@ export default function EntryForm({ entryId }: Props) {
         type: form.type,
         gradYear: form.gradYear,
         deadlineAt,
-        difficulty: form.difficulty,
         applyUrl: form.applyUrl.trim() || undefined,
         sourceUrl: form.sourceUrl.trim() || undefined,
         selectionFlow: form.selectionFlow.trim() || undefined,
@@ -283,30 +277,26 @@ export default function EntryForm({ entryId }: Props) {
             <label htmlFor="newCompanyIndustry" className="label">
               業界
             </label>
-            <select
+            <input
               id="newCompanyIndustry"
               className="input"
               value={newCompanyIndustry}
               onChange={(e) => setNewCompanyIndustry(e.target.value as Industry)}
-            >
-              {INDUSTRIES.map((v) => (
-                <option key={v} value={v}>
-                  {v}
-                </option>
-              ))}
-            </select>
+              placeholder="616社シートの業界（例: 外資コンサル）"
+            />
           </div>
           <div>
-            <label htmlFor="newCompanySize" className="label">
-              企業規模
+            <label htmlFor="newCompanyTier" className="label">
+              採用難易度Tier
             </label>
             <select
-              id="newCompanySize"
+              id="newCompanyTier"
               className="input"
-              value={newCompanySize}
-              onChange={(e) => setNewCompanySize(e.target.value as CompanySize)}
+              value={newCompanyTier}
+              onChange={(e) => setNewCompanyTier(e.target.value as Tier | '')}
             >
-              {COMPANY_SIZES.map((v) => (
+              <option value="">未設定</option>
+              {TIERS.map((v) => (
                 <option key={v} value={v}>
                   {v}
                 </option>
@@ -395,23 +385,6 @@ export default function EntryForm({ entryId }: Props) {
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div>
-          <label htmlFor="difficulty" className="label">
-            難易度
-          </label>
-          <select
-            id="difficulty"
-            className="input"
-            value={form.difficulty}
-            onChange={(e) => updateField('difficulty', Number(e.target.value))}
-          >
-            {DIFFICULTY_OPTIONS.map((v) => (
-              <option key={v} value={v}>
-                {'★'.repeat(v) + '☆'.repeat(5 - v)}
-              </option>
-            ))}
-          </select>
-        </div>
         <div>
           <label htmlFor="status" className="label">
             ステータス

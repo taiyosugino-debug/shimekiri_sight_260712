@@ -5,7 +5,8 @@
 'use client';
 
 import Link from 'next/link';
-import { difficultyStars, EntryWithCompany } from '@/lib/types';
+import { EntryWithCompany } from '@/lib/types';
+import { TierBadge } from '@/components/TierBadge';
 import { formatDeadline } from '@/lib/date';
 import DaysBadge from './DaysBadge';
 
@@ -47,11 +48,8 @@ export default function EntryCard({ entry, now }: EntryCardProps) {
       )}
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
-        <span>{entry.company.size}</span>
-        <span aria-hidden="true">・</span>
+        <TierBadge tier={entry.company.tier} />
         <span>{entry.company.industry}</span>
-        <span aria-hidden="true">・</span>
-        <span className="tracking-tight text-amber-500">{difficultyStars(entry.difficulty)}</span>
       </div>
     </Link>
   );

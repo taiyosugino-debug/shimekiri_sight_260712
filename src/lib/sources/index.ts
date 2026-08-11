@@ -27,7 +27,6 @@ export interface RawItem {
   url?: string;
   type?: string;
   gradYear?: number;
-  difficulty?: number;
 }
 
 /** configJson 共通スキーマ（PROJECT_SPEC.md §8） */
@@ -36,7 +35,6 @@ export interface SourceConfig {
     companyName?: string;
     type?: string;
     gradYear?: number;
-    difficulty?: number;
   };
   limit?: number;
 }
@@ -123,7 +121,6 @@ async function resolveCompanyId(store: Store, companyName: string): Promise<stri
   const created = await store.createCompany({
     name: trimmed,
     industry: 'その他',
-    size: '中堅・中小',
   });
   return created.id;
 }
@@ -170,7 +167,7 @@ export async function runSource(source: Source, store: Store): Promise<SyncResul
   }
 
   const now = new Date();
-  const config: { defaults?: { companyName?: string; type?: string; gradYear?: number; difficulty?: number } } =
+  const config: { defaults?: { companyName?: string; type?: string; gradYear?: number } } =
     source.configJson ? JSON.parse(source.configJson) : {};
   const defaults = config.defaults ?? {};
 
@@ -201,7 +198,6 @@ export async function runSource(source: Source, store: Store): Promise<SyncResul
 
       const type = resolveEntryType(item.type ?? defaults.type);
       const gradYear = item.gradYear ?? defaults.gradYear ?? new Date().getFullYear() + 2;
-      const difficulty = Math.min(5, Math.max(1, Math.round(item.difficulty ?? defaults.difficulty ?? 3)));
 
       const sourceKey = buildSourceKey(source.id, companyName, title, gradYear);
       const existing = existingBySourceKey.get(sourceKey);
@@ -234,7 +230,6 @@ export async function runSource(source: Source, store: Store): Promise<SyncResul
         type,
         gradYear,
         deadlineAt,
-        difficulty,
         applyUrl: item.url,
         // 情報源URLとして取込元（フィード/ページ）のURLを記録する
         sourceUrl: source.url,

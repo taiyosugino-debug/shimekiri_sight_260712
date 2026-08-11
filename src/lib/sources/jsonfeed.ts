@@ -74,7 +74,6 @@ export async function fetchJsonItems(source: Source): Promise<RawItem[]> {
     const url = fields.url ? toStringOrUndefined(getByPath(item, fields.url)) : undefined;
     const type = fields.type ? toStringOrUndefined(getByPath(item, fields.type)) : undefined;
     const gradYear = fields.gradYear ? toNumberOrUndefined(getByPath(item, fields.gradYear)) : undefined;
-    const difficulty = fields.difficulty ? toNumberOrUndefined(getByPath(item, fields.difficulty)) : undefined;
 
     return {
       companyName: companyName ?? config.defaults?.companyName,
@@ -83,7 +82,6 @@ export async function fetchJsonItems(source: Source): Promise<RawItem[]> {
       url,
       type: type ?? config.defaults?.type,
       gradYear: gradYear ?? config.defaults?.gradYear,
-      difficulty: difficulty ?? config.defaults?.difficulty,
     };
   });
 

@@ -5,7 +5,8 @@
 'use client';
 
 import Link from 'next/link';
-import { difficultyStars, EntryWithCompany } from '@/lib/types';
+import { EntryWithCompany } from '@/lib/types';
+import { TierBadge } from '@/components/TierBadge';
 import { formatDeadline } from '@/lib/date';
 import DaysBadge from './DaysBadge';
 
@@ -39,7 +40,7 @@ export default function PickupSection({ entries, now }: PickupSectionProps) {
               <span aria-hidden="true">・</span>
               <span>{entry.gradYear}卒</span>
             </div>
-            <span className="tracking-tight text-amber-500">{difficultyStars(entry.difficulty)}</span>
+            <TierBadge tier={entry.company.tier} />
           </Link>
         ))}
       </div>

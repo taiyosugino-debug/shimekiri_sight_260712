@@ -11,6 +11,7 @@ import {
   CompanyInput,
   Entry,
   EntryInput,
+  isTier,
   parseReviewDecision,
   ReviewItem,
   ReviewItemInput,
@@ -18,6 +19,7 @@ import {
   SourceInput,
   SourceRuntimePatch,
   Store,
+  Tier,
 } from '../types';
 
 const SHEETS_SCOPE = 'https://www.googleapis.com/auth/spreadsheets';
@@ -33,7 +35,9 @@ const COMPANIES_HEADER = [
   'id',
   'name',
   'industry',
-  'size',
+  // 廃止列。列位置がずれると既存行の読み取りが全て壊れるため、枠だけ残している。
+  // 読み書きともに行わない（将来シート側から物理削除する場合は rowToCompany の分割位置も直すこと）
+  'size_unused',
   'hp_url',
   'note',
   'created_at',
@@ -41,6 +45,12 @@ const COMPANIES_HEADER = [
   'deleted',
   // 追加分（採用ページURL。既存シート互換のため末尾に追加）
   'recruit_url',
+  // 616社対応で追加（既存シート互換のため末尾に追加）
+  'tier',
+  'difficulty_score',
+  'hiring_count',
+  'est_entries',
+  'est_ratio',
 ];
 
 // review タブ: 巡回結果の「要確認リスト」。人が「承認」列に OK / NG を書き込む。
@@ -78,7 +88,8 @@ const ENTRIES_HEADER = [
   'type',
   'grad_year',
   'deadline_at',
-  'difficulty',
+  // 廃止列（★難易度）。列位置がずれると既存行の読み取りが壊れるため枠だけ残している
+  'difficulty_unused',
   'apply_url',
   'description',
   'status',
@@ -128,6 +139,15 @@ function cellOrEmpty(v: string | undefined): string {
 }
 function emptyToUndefined(v: string | undefined): string | undefined {
   return v === undefined || v === '' ? undefined : v;
+}
+/** 空欄・非数値は undefined。0 は有効な値として残す */
+function cellToNumber(v: string | undefined): number | undefined {
+  if (v === undefined || String(v).trim() === '') return undefined;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : undefined;
+}
+function numberToCell(v: number | undefined): string {
+  return v === undefined || v === null ? '' : String(v);
 }
 
 // ---------------- 環境変数・アクセストークン ----------------
@@ -362,14 +382,34 @@ function dataRows(table: string[][]): { rowNumber: number; cells: string[] }[] {
 // ---------------- 行 <-> エンティティ 変換 ----------------
 
 function rowToCompany(cells: string[]): Company | null {
-  const [id, name, industry, size, hpUrl, note, createdAt, updatedAt, deleted, recruitUrl] = cells;
+  const [
+    id,
+    name,
+    industry,
+    ,
+    hpUrl,
+    note,
+    createdAt,
+    updatedAt,
+    deleted,
+    recruitUrl,
+    tier,
+    difficultyScore,
+    hiringCount,
+    estEntries,
+    estRatio,
+  ] = cells;
   if (cellToBool(deleted)) return null;
   if (!id) return null;
   return {
     id,
     name: cellOrEmpty(name),
     industry: cellOrEmpty(industry) as Company['industry'],
-    size: cellOrEmpty(size) as Company['size'],
+    tier: isTier(cellOrEmpty(tier)) ? (cellOrEmpty(tier) as Tier) : undefined,
+    difficultyScore: cellToNumber(difficultyScore),
+    hiringCount: cellToNumber(hiringCount),
+    estEntries: cellToNumber(estEntries),
+    estRatio: cellToNumber(estRatio),
     hpUrl: emptyToUndefined(hpUrl),
     recruitUrl: emptyToUndefined(recruitUrl),
     note: emptyToUndefined(note),
@@ -383,13 +423,18 @@ function companyToRow(c: Company, deleted = false): string[] {
     c.id,
     c.name,
     c.industry,
-    c.size,
+    '', // size_unused（廃止列。枠のみ維持）
     cellOrEmpty(c.hpUrl),
     cellOrEmpty(c.note),
     c.createdAt,
     c.updatedAt,
     boolToCell(deleted),
     cellOrEmpty(c.recruitUrl),
+    cellOrEmpty(c.tier),
+    numberToCell(c.difficultyScore),
+    numberToCell(c.hiringCount),
+    numberToCell(c.estEntries),
+    numberToCell(c.estRatio),
   ];
 }
 
@@ -401,7 +446,7 @@ function rowToEntry(cells: string[]): Entry | null {
     type,
     gradYear,
     deadlineAt,
-    difficulty,
+    ,
     applyUrl,
     description,
     status,
@@ -425,7 +470,6 @@ function rowToEntry(cells: string[]): Entry | null {
     type: cellOrEmpty(type) as Entry['type'],
     gradYear: Number(gradYear) || 0,
     deadlineAt: cellOrEmpty(deadlineAt),
-    difficulty: Number(difficulty) || 1,
     applyUrl: emptyToUndefined(applyUrl),
     description: emptyToUndefined(description),
     sourceUrl: emptyToUndefined(sourceUrl),
@@ -449,7 +493,7 @@ function entryToRow(e: Entry, deleted = false): string[] {
     e.type,
     String(e.gradYear),
     e.deadlineAt,
-    String(e.difficulty),
+    '', // difficulty_unused（廃止列。枠のみ維持）
     cellOrEmpty(e.applyUrl),
     cellOrEmpty(e.description),
     e.status,
@@ -618,6 +662,21 @@ async function appendRow(tab: string, row: string[]): Promise<void> {
   invalidateCache();
 }
 
+/** 複数行を1回のAPI呼び出しでまとめて追記する（616社の一括投入で必須） */
+async function appendRows(tab: string, rows: string[][]): Promise<void> {
+  if (rows.length === 0) return;
+  const { spreadsheetId } = getEnv();
+  const range = `${tab}!A:A`;
+  await sheetsJson(
+    `${SHEETS_API_BASE}/${spreadsheetId}/values/${encodeURIComponent(range)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ range, majorDimension: 'ROWS', values: rows }),
+    },
+  );
+  invalidateCache();
+}
+
 async function updateRow(tab: string, rowNumber: number, row: string[], columnCount: number): Promise<void> {
   const { spreadsheetId } = getEnv();
   const range = `${tab}!A${rowNumber}:${colLetter(columnCount)}${rowNumber}`;
@@ -653,7 +712,11 @@ export class GSheetsStore implements Store {
       id: input.id || genId('co'),
       name: input.name,
       industry: input.industry,
-      size: input.size,
+      tier: input.tier,
+      difficultyScore: input.difficultyScore,
+      hiringCount: input.hiringCount,
+      estEntries: input.estEntries,
+      estRatio: input.estRatio,
       hpUrl: input.hpUrl,
       recruitUrl: input.recruitUrl,
       note: input.note,
@@ -662,6 +725,32 @@ export class GSheetsStore implements Store {
     };
     await appendRow(TAB_COMPANIES, companyToRow(company, false));
     return company;
+  }
+
+  async createCompaniesBulk(inputs: (CompanyInput & { id?: string })[]): Promise<Company[]> {
+    if (inputs.length === 0) return [];
+    const now = nowIso();
+    const companies: Company[] = inputs.map((input) => ({
+      id: input.id || genId('co'),
+      name: input.name,
+      industry: input.industry,
+      tier: input.tier,
+      difficultyScore: input.difficultyScore,
+      hiringCount: input.hiringCount,
+      estEntries: input.estEntries,
+      estRatio: input.estRatio,
+      hpUrl: input.hpUrl,
+      recruitUrl: input.recruitUrl,
+      note: input.note,
+      createdAt: now,
+      updatedAt: now,
+    }));
+    // Sheets API の1リクエストが大きくなりすぎないよう分割して追記する
+    const CHUNK = 200;
+    for (let i = 0; i < companies.length; i += CHUNK) {
+      await appendRows(TAB_COMPANIES, companies.slice(i, i + CHUNK).map((c) => companyToRow(c, false)));
+    }
+    return companies;
   }
 
   async updateCompany(id: string, patch: Partial<CompanyInput>): Promise<Company | null> {
@@ -707,7 +796,6 @@ export class GSheetsStore implements Store {
       type: input.type,
       gradYear: input.gradYear,
       deadlineAt: input.deadlineAt,
-      difficulty: input.difficulty,
       applyUrl: input.applyUrl,
       description: input.description,
       // これらが欠けていると entryToRow で常に空欄になり、

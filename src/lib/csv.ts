@@ -9,7 +9,6 @@ import {
   Entry,
   ImportResult,
   ImportRowResult,
-  isCompanySize,
   isEntryType,
   isIndustry,
   Store,
@@ -18,12 +17,10 @@ import {
 const REQUIRED_HEADER = [
   'company_name',
   'industry',
-  'size',
   'title',
   'type',
   'grad_year',
   'deadline',
-  'difficulty',
   'apply_url',
   'description',
   'pickup',
@@ -121,12 +118,10 @@ interface ParsedRow {
   line: number; // 1-indexed（ヘッダーを1行目として、データは2行目から）
   companyName: string;
   industry: string;
-  size: string;
   title: string;
   type: string;
   gradYear: string;
   deadline: string;
-  difficulty: string;
   applyUrl: string;
   description: string;
   pickup: string;
@@ -206,12 +201,10 @@ export async function importCsv(
       line,
       companyName: obj.company_name || '',
       industry: obj.industry || '',
-      size: obj.size || '',
       title: obj.title || '',
       type: obj.type || '',
       gradYear: obj.grad_year || '',
       deadline: obj.deadline || '',
-      difficulty: obj.difficulty || '',
       applyUrl: obj.apply_url || '',
       description: obj.description || '',
       pickup: obj.pickup || '',
@@ -238,29 +231,21 @@ export async function importCsv(
       if (!deadlineAt) {
         throw new Error(`deadline を解釈できません（${parsed.deadline}）`);
       }
-      let difficulty = Number(parsed.difficulty);
-      if (!Number.isFinite(difficulty)) difficulty = 3;
-      difficulty = Math.min(5, Math.max(1, Math.round(difficulty)));
-
-      // 企業の解決（完全一致 trim。無ければ industry/size で自動作成）
+      // 企業の解決（完全一致 trim。無ければ industry で自動作成。Tierは企業マスターCSV側で設定する）
       const companyNameTrimmed = parsed.companyName.trim();
       let company = companyByName.get(companyNameTrimmed);
       if (!company) {
         if (!isIndustry(parsed.industry)) {
           throw new Error(`企業「${companyNameTrimmed}」が未登録で、industry も不正のため自動作成できません（${parsed.industry}）`);
         }
-        if (!isCompanySize(parsed.size)) {
-          throw new Error(`企業「${companyNameTrimmed}」が未登録で、size も不正のため自動作成できません（${parsed.size}）`);
-        }
         if (mode === 'commit') {
-          company = await store.createCompany({ name: companyNameTrimmed, industry: parsed.industry, size: parsed.size });
+          company = await store.createCompany({ name: companyNameTrimmed, industry: parsed.industry });
         } else {
           // dryrun: 仮の Company オブジェクトを組み立てて後続行の参照に使う
           company = {
             id: `dryrun_${companyNameTrimmed}`,
             name: companyNameTrimmed,
             industry: parsed.industry,
-            size: parsed.size,
             createdAt: now.toISOString(),
             updatedAt: now.toISOString(),
           };
@@ -277,7 +262,6 @@ export async function importCsv(
         if (mode === 'commit') {
           const updatedEntry = await store.updateEntry(existing.id, {
             deadlineAt,
-            difficulty,
             applyUrl: parsed.applyUrl || undefined,
             description: parsed.description || undefined,
             sourceUrl: parsed.sourceUrl || undefined,
@@ -302,7 +286,6 @@ export async function importCsv(
             type: parsed.type,
             gradYear,
             deadlineAt,
-            difficulty,
             applyUrl: parsed.applyUrl || undefined,
             description: parsed.description || undefined,
             sourceUrl: parsed.sourceUrl || undefined,
@@ -322,7 +305,6 @@ export async function importCsv(
             type: parsed.type,
             gradYear,
             deadlineAt,
-            difficulty,
             applyUrl: parsed.applyUrl || undefined,
             description: parsed.description || undefined,
             sourceUrl: parsed.sourceUrl || undefined,

@@ -33,9 +33,9 @@ export function recommendEntries(
     if (!company) continue;
 
     const sameIndustry = company.industry === current.company.industry;
-    const sameSize = company.size === current.company.size;
-    const score = (sameIndustry ? 2 : 0) + (sameSize ? 1 : 0);
-    if (score === 0) continue; // 業界も規模も一致しないものは出さない
+    const sameTier = company.tier !== undefined && company.tier === current.company.tier;
+    const score = (sameIndustry ? 2 : 0) + (sameTier ? 1 : 0);
+    if (score === 0) continue; // 業界もTierも一致しないものは出さない
 
     const candidate: Scored = { entry: { ...e, company }, score };
     const prev = bestPerCompany.get(e.companyId);

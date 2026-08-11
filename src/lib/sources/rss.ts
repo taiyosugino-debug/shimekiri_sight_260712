@@ -93,7 +93,6 @@ export async function fetchRssItems(source: Source): Promise<RawItem[]> {
       companyName: config.defaults?.companyName,
       type: config.defaults?.type,
       gradYear: config.defaults?.gradYear,
-      difficulty: config.defaults?.difficulty,
     };
   });
 

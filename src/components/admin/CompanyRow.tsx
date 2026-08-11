@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { Company, CompanySize, COMPANY_SIZES, Industry, INDUSTRIES } from '@/lib/types';
+import { Company, Industry, Tier, TIERS } from '@/lib/types';
+import { TierBadge } from '@/components/TierBadge';
 import { adminFetch, errorMessage } from './adminApi';
 
 interface Props {
@@ -14,7 +15,7 @@ export default function CompanyRow({ company, onChanged }: Props) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(company.name);
   const [industry, setIndustry] = useState<Industry>(company.industry);
-  const [size, setSize] = useState<CompanySize>(company.size);
+  const [tier, setTier] = useState<Tier | ''>(company.tier ?? '');
   const [hpUrl, setHpUrl] = useState(company.hpUrl ?? '');
   const [recruitUrl, setRecruitUrl] = useState(company.recruitUrl ?? '');
   const [note, setNote] = useState(company.note ?? '');
@@ -25,7 +26,7 @@ export default function CompanyRow({ company, onChanged }: Props) {
   function resetForm() {
     setName(company.name);
     setIndustry(company.industry);
-    setSize(company.size);
+    setTier(company.tier ?? '');
     setHpUrl(company.hpUrl ?? '');
     setRecruitUrl(company.recruitUrl ?? '');
     setNote(company.note ?? '');
@@ -45,7 +46,7 @@ export default function CompanyRow({ company, onChanged }: Props) {
         body: {
           name: name.trim(),
           industry,
-          size,
+          ...(tier ? { tier } : {}),
           hpUrl: hpUrl.trim() || undefined,
           recruitUrl: recruitUrl.trim() || undefined,
           note: note.trim() || undefined,
@@ -90,18 +91,18 @@ export default function CompanyRow({ company, onChanged }: Props) {
               </div>
               <div>
                 <label className="label">業界</label>
-                <select className="input" value={industry} onChange={(e) => setIndustry(e.target.value as Industry)}>
-                  {INDUSTRIES.map((v) => (
-                    <option key={v} value={v}>
-                      {v}
-                    </option>
-                  ))}
-                </select>
+                <input
+                  className="input"
+                  value={industry}
+                  onChange={(e) => setIndustry(e.target.value as Industry)}
+                  placeholder="616社シートの業界（例: 外資コンサル）"
+                />
               </div>
               <div>
-                <label className="label">企業規模</label>
-                <select className="input" value={size} onChange={(e) => setSize(e.target.value as CompanySize)}>
-                  {COMPANY_SIZES.map((v) => (
+                <label className="label">採用難易度Tier</label>
+                <select className="input" value={tier} onChange={(e) => setTier(e.target.value as Tier | '')}>
+                  <option value="">未設定</option>
+                  {TIERS.map((v) => (
                     <option key={v} value={v}>
                       {v}
                     </option>
@@ -154,7 +155,7 @@ export default function CompanyRow({ company, onChanged }: Props) {
     <tr className="border-b border-slate-100">
       <td className="px-3 py-2 font-medium text-slate-900">{company.name}</td>
       <td className="px-3 py-2 text-slate-700">{company.industry}</td>
-      <td className="px-3 py-2 text-slate-700">{company.size}</td>
+      <td className="px-3 py-2"><TierBadge tier={company.tier} /></td>
       <td className="px-3 py-2 text-slate-500">
         {company.hpUrl ? (
           <a href={company.hpUrl} target="_blank" rel="noopener noreferrer" className="text-brand-600 hover:underline">

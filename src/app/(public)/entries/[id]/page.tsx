@@ -6,7 +6,8 @@
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { getStore } from '@/lib/store';
-import { difficultyStars, EntryWithCompany } from '@/lib/types';
+import { EntryWithCompany } from '@/lib/types';
+import { TierBadge } from '@/components/TierBadge';
 import { formatDeadline, formatDeadlineFull, jstYmdCompact, remainLabel } from '@/lib/date';
 import DaysBadge from '@/components/public/DaysBadge';
 import { recommendEntries } from '@/lib/recommend';
@@ -68,7 +69,7 @@ export default async function EntryDetailPage({ params }: EntryDetailPageProps) 
           <DaysBadge deadlineAt={entryWithCompany.deadlineAt} />
           <span className="badge bg-slate-100 text-slate-600">{entryWithCompany.type}</span>
           <span className="badge bg-slate-100 text-slate-600">{entryWithCompany.gradYear}卒</span>
-          <span className="badge bg-slate-100 text-slate-600">{entryWithCompany.company.size}</span>
+          <TierBadge tier={entryWithCompany.company.tier} />
           <span className="badge bg-slate-100 text-slate-600">{entryWithCompany.company.industry}</span>
         </div>
 
@@ -83,9 +84,9 @@ export default async function EntryDetailPage({ params }: EntryDetailPageProps) 
         </div>
 
         <div className="mt-4">
-          <p className="label">難易度</p>
-          <p className="text-lg tracking-tight text-amber-500">
-            {difficultyStars(entryWithCompany.difficulty)}
+          <p className="label">採用難易度</p>
+          <p className="mt-1">
+            <TierBadge tier={entryWithCompany.company.tier} className="text-sm" />
           </p>
         </div>
 
@@ -192,7 +193,7 @@ export default async function EntryDetailPage({ params }: EntryDetailPageProps) 
             この企業を見ているなら、こちらもおすすめ
           </h2>
           <p className="mb-3 text-xs text-slate-500">
-            「{entryWithCompany.company.industry}／{entryWithCompany.company.size}」が近い企業をピックアップしました。
+            「{entryWithCompany.company.industry}／{entryWithCompany.company.tier ?? '難易度未設定'}」が近い企業をピックアップしました。
           </p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             {recommendations.map((rec) => (
@@ -210,7 +211,7 @@ export default async function EntryDetailPage({ params }: EntryDetailPageProps) 
                 <p className="line-clamp-2 text-xs font-medium text-slate-600">{rec.title}</p>
                 <div className="mt-auto flex flex-wrap items-center gap-1">
                   <span className="badge bg-slate-100 text-slate-600">{rec.company.industry}</span>
-                  <span className="badge bg-slate-100 text-slate-600">{rec.company.size}</span>
+                  <TierBadge tier={rec.company.tier} />
                 </div>
                 <p className="text-xs text-slate-500">締切 {formatDeadline(rec.deadlineAt)}</p>
               </Link>

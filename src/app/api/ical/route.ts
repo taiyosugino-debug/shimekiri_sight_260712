@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 
 /**
  * GET /api/ical — フィルタ条件に合致する published かつ未経過のエントリーを ICS 形式で返す。
- * クエリパラメータ: type, gradYear, size, industry, daysWithin, difficultyMin, q
+ * クエリパラメータ: type, gradYear, industry, tier, tierAtLeast, daysWithin, q
  */
 export async function GET(request: Request) {
   const url = new URL(request.url);

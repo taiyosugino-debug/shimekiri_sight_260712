@@ -4,29 +4,33 @@
 
 import {
   Company,
-  CompanySize,
+  compareTier,
   Entry,
   EntryType,
   EntryWithCompany,
   GRAD_YEARS,
   Industry,
-  isCompanySize,
   isEntryType,
   isIndustry,
+  isTier,
+  Tier,
 } from './types';
+import { industryGroupOf } from './industry';
 import { daysUntil, isExpired } from './date';
 
-export type SortKey = 'deadline_asc' | 'deadline_desc' | 'newest';
+export type SortKey = 'deadline_asc' | 'deadline_desc' | 'newest' | 'tier_desc';
 
 export interface FilterParams {
   type?: EntryType;
   gradYear?: number;
-  size?: CompanySize;
+  /** 業界。生値（例: 外資IT）でも集約グループ名（例: IT・通信）でも指定できる */
   industry?: Industry;
+  /** 採用難易度Tier（完全一致） */
+  tier?: Tier;
+  /** 採用難易度Tier がこれ以上に難関のものだけ（例: 'A' なら SS+〜A） */
+  tierAtLeast?: Tier;
   /** 残り日数 N 日以内（期限切れは含まない） */
   daysWithin?: number;
-  /** 難易度 N 以上 */
-  difficultyMin?: number;
   /** 企業名・タイトルのフリーワード */
   q?: string;
   includeExpired?: boolean;
@@ -51,19 +55,21 @@ export function parseFilterParams(sp: URLSearchParams): FilterParams {
   if (isEntryType(type)) p.type = type;
   const gy = Number(sp.get('gradYear'));
   if ((GRAD_YEARS as readonly number[]).includes(gy)) p.gradYear = gy;
-  const size = sp.get('size');
-  if (isCompanySize(size)) p.size = size;
   const industry = sp.get('industry');
   if (isIndustry(industry)) p.industry = industry;
+  const tier = sp.get('tier');
+  if (isTier(tier)) p.tier = tier;
+  const tierAtLeast = sp.get('tierAtLeast');
+  if (isTier(tierAtLeast)) p.tierAtLeast = tierAtLeast;
   const dw = Number(sp.get('daysWithin'));
   if (Number.isInteger(dw) && dw > 0 && dw <= 365) p.daysWithin = dw;
-  const dm = Number(sp.get('difficultyMin'));
-  if (Number.isInteger(dm) && dm >= 1 && dm <= 5) p.difficultyMin = dm;
   const q = sp.get('q');
   if (q && q.trim()) p.q = q.trim();
   if (sp.get('includeExpired') === '1' || sp.get('includeExpired') === 'true') p.includeExpired = true;
   const sort = sp.get('sort');
-  if (sort === 'deadline_asc' || sort === 'deadline_desc' || sort === 'newest') p.sort = sort;
+  if (sort === 'deadline_asc' || sort === 'deadline_desc' || sort === 'newest' || sort === 'tier_desc') {
+    p.sort = sort;
+  }
   return p;
 }
 
@@ -81,13 +87,17 @@ export function applyFilters(
     if (!p.includeExpired && expired) return false;
     if (p.type && e.type !== p.type) return false;
     if (p.gradYear && e.gradYear !== p.gradYear) return false;
-    if (p.size && e.company.size !== p.size) return false;
-    if (p.industry && e.company.industry !== p.industry) return false;
+    if (p.industry) {
+      // 生値の完全一致か、集約グループ名の一致のどちらかで通す
+      const raw = e.company.industry;
+      if (raw !== p.industry && industryGroupOf(raw) !== p.industry) return false;
+    }
+    if (p.tier && e.company.tier !== p.tier) return false;
+    if (p.tierAtLeast && compareTier(e.company.tier, p.tierAtLeast) > 0) return false;
     if (p.daysWithin !== undefined) {
       if (expired) return false;
       if (daysUntil(e.deadlineAt, now) > p.daysWithin) return false;
     }
-    if (p.difficultyMin !== undefined && e.difficulty < p.difficultyMin) return false;
     if (p.q) {
       const q = p.q.toLowerCase();
       const hay = `${e.company.name} ${e.title}`.toLowerCase();
@@ -107,6 +117,11 @@ export function applyFilters(
     list = [...active, ...expired];
   } else if (sort === 'deadline_desc') {
     list = [...list].sort((a, b) => byDeadlineAsc(b, a));
+  } else if (sort === 'tier_desc') {
+    // 難関順（SS+ が先頭）。同Tier内は締切が近い順
+    list = [...list].sort(
+      (a, b) => compareTier(a.company.tier, b.company.tier) || byDeadlineAsc(a, b),
+    );
   } else {
     list = [...list].sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),

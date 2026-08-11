@@ -1,13 +1,14 @@
 // =============================================================
 // エントリーテーブル — md以上の画面幅で表示するテーブルレイアウト
-// 列: 締切 / 企業・タイトル / 種別 / 卒年 / 規模・業界 / 難易度
+// 列: 締切 / 企業・タイトル / 種別 / 卒年 / 業界 / 採用難易度Tier
 // =============================================================
 
 'use client';
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { difficultyStars, EntryWithCompany } from '@/lib/types';
+import { EntryWithCompany } from '@/lib/types';
+import { TierBadge } from '@/components/TierBadge';
 import { formatDeadline } from '@/lib/date';
 import DaysBadge from './DaysBadge';
 
@@ -27,8 +28,8 @@ export default function EntryTable({ entries, now }: EntryTableProps) {
           <th className="px-3 py-2 font-medium">企業・タイトル</th>
           <th className="px-3 py-2 font-medium">種別</th>
           <th className="px-3 py-2 font-medium">卒年</th>
-          <th className="px-3 py-2 font-medium">規模・業界</th>
-          <th className="px-3 py-2 font-medium">難易度</th>
+          <th className="px-3 py-2 font-medium">業界</th>
+          <th className="px-3 py-2 font-medium">採用難易度</th>
         </tr>
       </thead>
       <tbody>
@@ -63,13 +64,10 @@ export default function EntryTable({ entries, now }: EntryTableProps) {
             <td className="whitespace-nowrap px-3 py-3 align-top text-slate-600">{entry.type}</td>
             <td className="whitespace-nowrap px-3 py-3 align-top text-slate-600">{entry.gradYear}卒</td>
             <td className="whitespace-nowrap px-3 py-3 align-top text-slate-600">
-              <div className="flex flex-col">
-                <span>{entry.company.size}</span>
-                <span className="text-xs text-slate-400">{entry.company.industry}</span>
-              </div>
+              <span className="text-xs text-slate-500">{entry.company.industry}</span>
             </td>
-            <td className="whitespace-nowrap px-3 py-3 align-top tracking-tight text-amber-500">
-              {difficultyStars(entry.difficulty)}
+            <td className="whitespace-nowrap px-3 py-3 align-top">
+              <TierBadge tier={entry.company.tier} />
             </td>
           </tr>
         ))}

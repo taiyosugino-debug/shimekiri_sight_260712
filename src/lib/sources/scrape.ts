@@ -179,7 +179,6 @@ export async function fetchScrapeItems(source: Source): Promise<RawItem[]> {
       const companyName = fields.companyName ? extractField(root, fields.companyName) : undefined;
       const type = fields.type ? extractField(root, fields.type) : undefined;
       const gradYearRaw = fields.gradYear ? extractField(root, fields.gradYear) : undefined;
-      const difficultyRaw = fields.difficulty ? extractField(root, fields.difficulty) : undefined;
 
       items.push({
         title,
@@ -188,7 +187,6 @@ export async function fetchScrapeItems(source: Source): Promise<RawItem[]> {
         companyName: companyName ?? config.defaults?.companyName,
         type: type ?? config.defaults?.type,
         gradYear: toNumberOrUndefined(gradYearRaw) ?? config.defaults?.gradYear,
-        difficulty: toNumberOrUndefined(difficultyRaw) ?? config.defaults?.difficulty,
       });
     });
 

@@ -1,6 +1,6 @@
 // =============================================================
 // 共通型定義 — 全レイヤー（API / UI / データ層）の唯一の契約
-// このファイルは変更しないこと（PROJECT_SPEC.md §0 参照）
+// 616社対応（2026-08）で変更: size 廃止 / Entry.difficulty 廃止 / Company に tier ほかを追加
 // =============================================================
 
 export const SITE_NAME = 'Abuild 締切ナビ';
@@ -9,11 +9,30 @@ export const SITE_TAGLINE = 'エントリー締切を見逃さない';
 export const ENTRY_TYPES = ['インターン', '本選考', '説明会・イベント'] as const;
 export type EntryType = (typeof ENTRY_TYPES)[number];
 
-export const COMPANY_SIZES = ['大手', 'メガベンチャー', '中堅・中小', 'スタートアップ'] as const;
-export type CompanySize = (typeof COMPANY_SIZES)[number];
+/**
+ * 業界。616社マスタシートの生値をそのまま保持する（シートが唯一の正）。
+ * 表示・絞り込み用の集約グループは lib/industry.ts 側で定義する。
+ */
+export type Industry = string;
 
-export const INDUSTRIES = ['IT', 'コンサル', 'メーカー', '金融', '広告', '総合商社', '人材', 'インフラ', 'その他'] as const;
-export type Industry = (typeof INDUSTRIES)[number];
+/**
+ * 採用難易度Tier。616社マスタシートの Tier 列に対応する。
+ * 文字列ソートでは正しい順序にならないため、必ず TIER_ORDER / compareTier を使うこと。
+ */
+export const TIERS = ['SS+', 'SS', 'S+', 'S', 'S-', 'A+', 'A', 'A-', 'B+', 'B'] as const;
+export type Tier = (typeof TIERS)[number];
+
+/** Tierの序列。小さいほど難関。ソート・比較はここだけを参照する */
+export const TIER_ORDER: Record<Tier, number> = {
+  'SS+': 1, SS: 2, 'S+': 3, S: 4, 'S-': 5, 'A+': 6, A: 7, 'A-': 8, 'B+': 9, B: 10,
+};
+
+/** 難関順（SS+ が先頭）に並べるための比較関数 */
+export function compareTier(a: Tier | undefined, b: Tier | undefined): number {
+  const ai = a ? TIER_ORDER[a] : Number.MAX_SAFE_INTEGER;
+  const bi = b ? TIER_ORDER[b] : Number.MAX_SAFE_INTEGER;
+  return ai - bi;
+}
 
 export const GRAD_YEARS = [2026, 2027, 2028, 2029] as const;
 
@@ -34,8 +53,18 @@ export type SourceType = (typeof SOURCE_TYPES)[number];
 export interface Company {
   id: string;
   name: string;
+  /** 616社マスタシートの業界（生値） */
   industry: Industry;
-  size: CompanySize;
+  /** 採用難易度Tier。ユーザー向けに表示する唯一の難易度指標 */
+  tier?: Tier;
+  /** 入社難易度（数値・50.5〜68.5）。内部ソート用で画面には出さない */
+  difficultyScore?: number;
+  /** 採用人数 */
+  hiringCount?: number;
+  /** 推定エントリー数 */
+  estEntries?: number;
+  /** 推定内定倍率 */
+  estRatio?: number;
   hpUrl?: string;
   /** 採用ページURL。巡回（週次クロール）の対象。未設定なら hpUrl を使う */
   recruitUrl?: string;
@@ -52,8 +81,6 @@ export interface Entry {
   gradYear: number;
   /** 締切日時。必ず JST オフセット付き ISO8601（例 2026-07-06T23:59:00+09:00） */
   deadlineAt: string;
-  /** 難易度 1..5 */
-  difficulty: number;
   applyUrl?: string;
   description?: string;
   /** 情報源URL（この締切情報の出どころ。公式採用ページ・就活サイト等） */
@@ -196,7 +223,11 @@ export interface CrawlRunResult {
 export interface CompanyInput {
   name: string;
   industry: Industry;
-  size: CompanySize;
+  tier?: Tier;
+  difficultyScore?: number;
+  hiringCount?: number;
+  estEntries?: number;
+  estRatio?: number;
   hpUrl?: string;
   recruitUrl?: string;
   note?: string;
@@ -208,7 +239,6 @@ export interface EntryInput {
   type: EntryType;
   gradYear: number;
   deadlineAt: string;
-  difficulty: number;
   applyUrl?: string;
   description?: string;
   sourceUrl?: string;
@@ -282,6 +312,11 @@ export interface Store {
   listCompanies(): Promise<Company[]>;
   getCompany(id: string): Promise<Company | null>;
   createCompany(input: CompanyInput & { id?: string }): Promise<Company>;
+  /**
+   * 複数企業をまとめて作成する。616社の一括投入で1行ずつ書くと
+   * 実行時間・APIコール数が跳ね上がるため、対応バックエンドはここで一括化する。
+   */
+  createCompaniesBulk(inputs: (CompanyInput & { id?: string })[]): Promise<Company[]>;
   updateCompany(id: string, patch: Partial<CompanyInput>): Promise<Company | null>;
   deleteCompany(id: string): Promise<boolean>;
 
@@ -313,11 +348,12 @@ export interface Store {
 export function isEntryType(v: unknown): v is EntryType {
   return typeof v === 'string' && (ENTRY_TYPES as readonly string[]).includes(v);
 }
-export function isCompanySize(v: unknown): v is CompanySize {
-  return typeof v === 'string' && (COMPANY_SIZES as readonly string[]).includes(v);
-}
+/** 業界は616社マスタシートの生値をそのまま受け入れる（空文字だけを弾く） */
 export function isIndustry(v: unknown): v is Industry {
-  return typeof v === 'string' && (INDUSTRIES as readonly string[]).includes(v);
+  return typeof v === 'string' && v.trim() !== '';
+}
+export function isTier(v: unknown): v is Tier {
+  return typeof v === 'string' && (TIERS as readonly string[]).includes(v);
 }
 export function isEntryStatus(v: unknown): v is EntryStatus {
   return typeof v === 'string' && (ENTRY_STATUSES as readonly string[]).includes(v);
@@ -342,10 +378,4 @@ export function parseReviewDecision(v: unknown): ReviewDecision {
   if (['ok', 'o', '○', '〇', '承認', 'yes', 'y', 'はい', 'true', '1'].includes(s)) return '承認';
   if (['ng', 'x', '×', '✕', '却下', 'no', 'n', 'いいえ', 'false', '0'].includes(s)) return '却下';
   return '未確認';
-}
-
-/** 難易度を ★★★☆☆ 形式に */
-export function difficultyStars(difficulty: number): string {
-  const d = Math.min(5, Math.max(1, Math.round(difficulty)));
-  return '★'.repeat(d) + '☆'.repeat(5 - d);
 }

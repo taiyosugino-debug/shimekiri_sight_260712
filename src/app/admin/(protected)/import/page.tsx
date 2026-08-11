@@ -7,7 +7,7 @@ import ImportResultTable from '@/components/admin/ImportResultTable';
 import { ErrorBanner } from '@/components/admin/Feedback';
 
 const CSV_HEADER =
-  'company_name,industry,size,title,type,grad_year,deadline,difficulty,apply_url,description,pickup,source_url,selection_flow,web_test';
+  'company_name,industry,title,type,grad_year,deadline,apply_url,description,pickup,source_url,selection_flow,web_test';
 
 const SAMPLE_CSV = `${CSV_HEADER}
 株式会社サンプル商事,総合商社,大手,2028卒 サマーインターン(3days),インターン,2028,2026-08-15,3,https://example.com/recruit/,商社業界の仕事を体験できる3日間のプログラムです。,TRUE,https://example.com/news/123,ES提出 → Webテスト → GD → 面接（2回）,玉手箱

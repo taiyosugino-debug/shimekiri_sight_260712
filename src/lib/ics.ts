@@ -49,7 +49,7 @@ function buildEventDescription(e: EntryWithCompany): string {
   const parts: string[] = [
     `種別: ${e.type}`,
     `卒年: ${e.gradYear}卒`,
-    `難易度: ${e.difficulty}`,
+    ...(e.company.tier ? [`採用難易度: ${e.company.tier}`] : []),
   ];
   if (e.applyUrl) parts.push(`URL: ${e.applyUrl}`);
   if (e.description) parts.push(e.description);
