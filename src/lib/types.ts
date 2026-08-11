@@ -318,6 +318,12 @@ export interface Store {
    */
   createCompaniesBulk(inputs: (CompanyInput & { id?: string })[]): Promise<Company[]>;
   updateCompany(id: string, patch: Partial<CompanyInput>): Promise<Company | null>;
+  /**
+   * 複数企業をまとめて更新し、更新できた件数を返す。
+   * 1件ずつ updateCompany を呼ぶとシート読み取りが件数分走り API 上限に当たるため、
+   * 大量更新はこちらを使う。
+   */
+  updateCompaniesBulk(patches: { id: string; patch: Partial<CompanyInput> }[]): Promise<number>;
   deleteCompany(id: string): Promise<boolean>;
 
   listEntries(): Promise<Entry[]>;

@@ -677,6 +677,36 @@ async function appendRows(tab: string, rows: string[][]): Promise<void> {
   invalidateCache();
 }
 
+/**
+ * 複数行を1回のAPI呼び出しでまとめて書き換える。
+ * 1行ずつ updateRow を呼ぶと「シート全体の読み取り＋書き込み」が件数分走り、
+ * Sheets API の 1分あたり読み取り上限（429）にすぐ当たるため、大量更新はこちらを使う。
+ */
+async function batchUpdateRows(
+  tab: string,
+  updates: { rowNumber: number; row: string[] }[],
+  columnCount: number,
+): Promise<void> {
+  if (updates.length === 0) return;
+  const { spreadsheetId } = getEnv();
+  const CHUNK = 100;
+  for (let i = 0; i < updates.length; i += CHUNK) {
+    const slice = updates.slice(i, i + CHUNK);
+    await sheetsJson(`${SHEETS_API_BASE}/${spreadsheetId}/values:batchUpdate`, {
+      method: 'POST',
+      body: JSON.stringify({
+        valueInputOption: 'RAW',
+        data: slice.map((u) => ({
+          range: `${tab}!A${u.rowNumber}:${colLetter(columnCount)}${u.rowNumber}`,
+          majorDimension: 'ROWS',
+          values: [u.row],
+        })),
+      }),
+    });
+  }
+  invalidateCache();
+}
+
 async function updateRow(tab: string, rowNumber: number, row: string[], columnCount: number): Promise<void> {
   const { spreadsheetId } = getEnv();
   const range = `${tab}!A${rowNumber}:${colLetter(columnCount)}${rowNumber}`;
@@ -751,6 +781,38 @@ export class GSheetsStore implements Store {
       await appendRows(TAB_COMPANIES, companies.slice(i, i + CHUNK).map((c) => companyToRow(c, false)));
     }
     return companies;
+  }
+
+  async updateCompaniesBulk(patches: { id: string; patch: Partial<CompanyInput> }[]): Promise<number> {
+    if (patches.length === 0) return 0;
+    // シート全体の読み取りは1回だけ
+    const { spreadsheetId } = getEnv();
+    const range = `${TAB_COMPANIES}!A:${colLetter(COMPANIES_HEADER.length)}`;
+    const data = await sheetsJson<{ values?: string[][] }>(
+      `${SHEETS_API_BASE}/${spreadsheetId}/values/${encodeURIComponent(range)}`,
+    );
+    const rows = data.values ?? [];
+    const rowNumberById = new Map<string, number>();
+    const cellsById = new Map<string, string[]>();
+    for (let i = 1; i < rows.length; i++) {
+      const id = rows[i]?.[0] ?? '';
+      if (id) {
+        rowNumberById.set(id, i + 1);
+        cellsById.set(id, rows[i]);
+      }
+    }
+    const now = nowIso();
+    const updates: { rowNumber: number; row: string[] }[] = [];
+    for (const { id, patch } of patches) {
+      const rowNumber = rowNumberById.get(id);
+      const cells = cellsById.get(id);
+      if (!rowNumber || !cells) continue;
+      const existing = rowToCompany(cells);
+      if (!existing) continue; // 削除済み行は触らない
+      updates.push({ rowNumber, row: companyToRow({ ...existing, ...patch, updatedAt: now }, false) });
+    }
+    await batchUpdateRows(TAB_COMPANIES, updates, COMPANIES_HEADER.length);
+    return updates.length;
   }
 
   async updateCompany(id: string, patch: Partial<CompanyInput>): Promise<Company | null> {

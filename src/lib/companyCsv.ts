@@ -123,6 +123,8 @@ export async function importCompanyCsv(
   const seenNames = new Set<string>();
   /** 新規作成分。最後に一括で書き込む */
   const pendingCreates: CompanyInput[] = [];
+  /** 更新分。最後に一括で書き込む */
+  const pendingUpdates: { id: string; patch: Partial<CompanyInput> }[] = [];
 
   for (let i = 1; i < table.length; i++) {
     const line = i + 1;
@@ -212,7 +214,8 @@ export async function importCompanyCsv(
         continue;
       }
 
-      if (mode === 'commit') await store.updateCompany(current.id, patch);
+      // 1件ずつ書くとシート読み取りが件数分走り API 上限に当たるため、まとめて書く
+      if (mode === 'commit') pendingUpdates.push({ id: current.id, patch });
       updated += 1;
       rows.push({ line, action: 'update', message: `更新: ${name}（${changes.join(' / ')}）` });
     } catch (err) {
@@ -222,8 +225,9 @@ export async function importCompanyCsv(
     }
   }
 
-  if (mode === 'commit' && pendingCreates.length > 0) {
-    await store.createCompaniesBulk(pendingCreates);
+  if (mode === 'commit') {
+    if (pendingUpdates.length > 0) await store.updateCompaniesBulk(pendingUpdates);
+    if (pendingCreates.length > 0) await store.createCompaniesBulk(pendingCreates);
   }
 
   return { ok: errors === 0, created, updated, unchanged, errors, rows };

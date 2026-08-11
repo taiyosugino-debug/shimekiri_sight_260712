@@ -84,6 +84,14 @@ export class MemoryStore implements Store {
     return updated;
   }
 
+  async updateCompaniesBulk(patches: { id: string; patch: Partial<CompanyInput> }[]): Promise<number> {
+    let n = 0;
+    for (const { id, patch } of patches) {
+      if (await this.updateCompany(id, patch)) n += 1;
+    }
+    return n;
+  }
+
   async deleteCompany(id: string): Promise<boolean> {
     const before = companies.length;
     companies = companies.filter((c) => c.id !== id);
